@@ -1,0 +1,32 @@
+import { Activity, ArrowUpRight, ChartNoAxesCombined, Coins, Pin, Wallet } from 'lucide-react'
+import { Link } from '@tanstack/react-router'
+import Decimal from 'decimal.js'
+import { useMonitor, type MonitorData } from '@/lib/monitor'
+import { useWorkspace } from '@/lib/preferences'
+import { AccountCard, ErrorNotice, Metric, Money, NoPins, PageHeading, RefreshButton } from '@/components/common'
+import { Button } from '@/components/ui/button'
+import { overviewTotals } from '@/lib/overview'
+
+export function spendingTotal(monitor: MonitorData, field: 'today' | 'spending') {
+  const rows = monitor.spending.data?.rows
+  if (!rows?.length || rows.length !== monitor.subscriptions.length || rows.some(row => row[field].data === null || row[field].error)) return null
+  return rows.reduce((sum, row) => sum.plus(row[field].data!), new Decimal(0)).toNumber()
+}
+export function DashboardPage() {
+  const { preferences } = useWorkspace()
+  const monitor = useMonitor()
+  const totals = overviewTotals(preferences.pins, monitor.status.data, monitor.today.data?.items)
+  const statsError = monitor.spending.data?.rows.some(row => row.spending.error || row.today.error)
+  return <div className="page-stack"><PageHeading title="工作空间概览" action={<RefreshButton countdown={monitor.nextRefreshIn} busy={monitor.isFetching} onClick={() => void monitor.refresh()} />} />
+    <ErrorNotice message={monitor.status.error?.message ?? monitor.today.error?.message ?? monitor.quota.error?.message ?? monitor.spending.error?.message} />
+    <div className="metric-grid">
+      <Metric label="今日消费" value={<Money value={spendingTotal(monitor, 'today')} currency={preferences.actualCurrency} />} icon={<Wallet />} loading={monitor.spending.isFetching && !monitor.spending.data} />
+      <Metric label="周期消费" value={<Money value={spendingTotal(monitor, 'spending')} currency={preferences.actualCurrency} />} icon={<Coins />} loading={monitor.spending.isFetching && !monitor.spending.data} />
+      <Metric label="当前并发" value={<>{totals.concurrency ?? '—'}<span className="metric-denominator"> / {totals.concurrencyLimit ?? '—'}</span></>} icon={<Activity />} loading={monitor.status.isFetching && !monitor.status.data} />
+      <Metric label="今日标准用量" value={<Money value={totals.standardUsage} />} icon={<ChartNoAxesCombined />} loading={monitor.today.isFetching && !monitor.today.data} />
+    </div>
+    {statsError && <ErrorNotice message="部分消费统计暂不可用" />}
+    <section className="flex flex-col gap-5"><div className="section-heading"><div className="flex items-center gap-2"><Pin className="size-4" /><h2>关注的账号</h2><span className="section-count">{preferences.pins.length}</span></div><Button variant="ghost" asChild><Link to="/accounts">管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></div>{preferences.pins.length ? <div className="account-grid">{preferences.pins.map(id => <AccountCard key={id} id={id} monitor={monitor} />)}</div> : <NoPins />}</section>
+
+  </div>
+}

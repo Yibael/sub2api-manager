@@ -1,0 +1,99 @@
+# Sub2api Manager
+
+基于 sub2bar 功能设计的移动端优先、只读 sub2api 监控 PWA。使用 React、shadcn/ui、TanStack Router / Query / Form，以及 Bun + Elysia。
+
+## 运行
+
+```sh
+bun install
+cp .env.example .env
+```
+
+在 `.env` 中填写：
+
+- `SUB2API_URL`：sub2api 地址，支持子路径。默认要求 HTTPS。
+- `SUB2API_ADMIN_KEY`：上游 Admin API Key，仅服务端读取。
+- `APP_PASSWORD`：此监控应用的独立访问密码，至少 16 个字符。
+- `APP_ORIGIN`：浏览器实际访问的完整来源；开发默认 `http://localhost:5173`，生产必须 HTTPS。域名和端口需要完全匹配。
+- `SUB2API_TIMEZONE`：与 sub2api 今日统计一致的 IANA 时区，例如 `Asia/Shanghai`。
+
+```sh
+bun run dev
+```
+
+使用 `http://localhost:5173`。开发 API 默认监听 `127.0.0.1:3001`，由 Vite 同源代理。
+
+不配置真实实例也可以查看演示：
+
+```sh
+bun run dev:demo
+```
+
+开发预览使用固定示例数据，不访问 sub2api；界面采用与真实连接一致的文案，不显示数据源模式标识。示例与真实实例的本地偏好及共享刷新设置相互隔离。
+
+如默认端口已占用：
+
+```sh
+DEMO_MODE=true DEV_PORT=5188 PORT=3008 APP_ORIGIN=http://localhost:5188 bun run dev
+```
+
+## 核心行为
+
+- 概览、账号管理、账号详情、消费统计和设置；手机底部导航、桌面侧栏、浅色 / 深色模式。
+- Pin 与排序、OAuth 订阅配置、今日用量、额度窗口与 API Key 本地限额。
+- 独立统计今日实际消费、订阅周期实际消费和月订阅成本；支持指定时区、排除 Admin、金额隐藏。
+- 浏览器只请求应用后端，后端携带 Admin Key 查询 sub2api。
+- **共享缓存**：5 秒间隔内，设备 B 直接复用设备 A 的查询结果，不显示缓存命中提示。
+- **并发去重**：相同账号同时查询只执行一次；重叠账号列表按账号复用。
+- **没有后端轮询**：缓存到期只等待下一次请求。关闭所有设备后，不会启动后续刷新。正在进行的一轮请求有超时上限。
+- 普通手动刷新同样遵守缓存间隔；额度查询不使用 `force=true`。
+- 失败保留同范围旧值并显示失败；没有历史结果显示未知。跨日、跨周期不会复用不匹配的统计。
+- 刷新间隔保存到 `DATA_DIR/intervals.json`，其他配置按实例保存在设备，可导入导出。
+
+## 生产部署
+
+```sh
+bun run build
+APP_ORIGIN=https://manager.example.com bun run start
+```
+
+生产由 Elysia 同时提供 `dist` 静态资源、SPA 路由回退和 `/api`。在前面配置 HTTPS 反向代理；代理到 `127.0.0.1:3001`，保持路径与请求 `Origin`。不要将管理员密钥放入任何 `VITE_` 环境变量。
+
+Docker：
+
+```sh
+docker build -t sub2api-manager .
+docker run --name sub2api-manager -d \
+  --env-file .env \
+  -e APP_ORIGIN=https://manager.example.com \
+  -e HOST=0.0.0.0 \
+  -e DATA_DIR=/app/data \
+  -p 127.0.0.1:3001:3001 \
+  -v sub2api-manager-data:/app/data \
+  sub2api-manager
+```
+
+需要容器监听所有容器内网卡，宿主端口只绑定回环地址。通过 HTTPS 反向代理对外提供访问。生产环境关闭 `DEMO_MODE`。
+
+当前使用单进程缓存与内存会话，部署一个应用进程；进程重启后需要重新登录，数据在下一次请求时重建。多副本共享缓存、跨设备偏好同步和后台推送不在本版范围。
+
+## PWA
+
+生产构建生成 Manifest 和 Service Worker。iPhone 上在 Safari 打开 HTTPS 地址，通过分享菜单添加到主屏幕。应用已包含安全区、独立窗口模式、触控布局和更新提示。
+
+仅预缓存静态应用资源，`/api` 响应不会进入 Service Worker 缓存。当前会话断网时保留内存数据；离线冷启动仅展示应用外壳和连接错误，不读取持久化账号快照。
+
+## 验证
+
+```sh
+bun run test
+bun run typecheck
+bun run lint
+bun run build
+```
+
+Vitest 覆盖共享缓存、请求去重、闲置不查询、失败退避、时区及短月续费边界、统计口径、认证和响应裁剪等行为。界面通过 computer use 检查，无 Playwright 测试依赖。
+
+接口实现参考本地 sub2bar 的接口核查和模型；尚未使用用户真实实例验证部署版本。iOS 真机安装、键盘与系统恢复行为仍需在实际 HTTPS 部署后验收，桌面手机视口检查不能替代真机测试。
+
+更多设计约定见 [docs/architecture.md](docs/architecture.md)。
