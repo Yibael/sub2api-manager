@@ -1,8 +1,10 @@
-import { describe, expect, it, vi } from 'vitest'
+import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../server/app'
 import { Monitor } from '../server/monitor'
 import { defaultIntervals } from '../shared/domain'
 import { demoUpstream } from '../server/demo'
+
+afterEach(() => vi.useRealTimers())
 
 function setup() {
   const upstream = { request: vi.fn(demoUpstream.request) }, monitor = new Monitor(upstream, { ...defaultIntervals }, 'UTC')
@@ -53,5 +55,25 @@ describe('application boundary', () => {
     const response = await request('/spending/today', { ids: [4], timeZone: 'UTC', includeAdmin: false }, cookie)
     expect(response.status).toBe(200)
     expect((await response.json()).items[4].data).toBe(12.3)
+  })
+  it('shares cooldowns across distinct authenticated sessions and manual refreshes', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00Z'))
+    const { request, upstream } = setup()
+    const cookies = await Promise.all(Array.from({ length: 2 }, async () => {
+      const login = await request('/login', { password: 'test-password-long-enough' })
+      return login.headers.get('set-cookie')!.split(';')[0]
+    }))
+    expect(cookies[0]).not.toBe(cookies[1])
+    const clients = () => Promise.all(Array.from({ length: 20 }, (_, id) => request('/status', { ids: [1], force: true }, cookies[id % 2])))
+    expect((await clients()).every(response => response.status === 200)).toBe(true)
+    expect(upstream.request).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(4999)
+    await clients()
+    expect(upstream.request).toHaveBeenCalledTimes(1)
+    vi.advanceTimersByTime(1)
+    await clients()
+    expect(upstream.request).toHaveBeenCalledTimes(2)
+    await vi.advanceTimersByTimeAsync(86400000)
+    expect(upstream.request).toHaveBeenCalledTimes(2)
   })
 })

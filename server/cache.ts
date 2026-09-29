@@ -1,6 +1,7 @@
 import type { Sample } from '../shared/domain'
+import { UpstreamError } from './upstream'
 
-interface Entry<T> { sample: Sample<T>; completedAt: number | null; retryAt: number; failures: number; pending?: Promise<Sample<T>> }
+interface Entry<T> { sample: Sample<T>; settledAt: number | null; intervalMs: number; retryAt: number; failures: number; pending?: Promise<Sample<T>> }
 
 /** Demand-only cache. No timers, refresh jobs, or detached retries. */
 export class DemandCache<T> {
@@ -17,18 +18,19 @@ export class DemandCache<T> {
   async getMany(keys: string[], intervalMs: number, load: (missing: string[]) => Promise<Map<string, T | Error>>): Promise<Record<string, Sample<T>>> {
     const unique = [...new Set(keys)]
     // Check capacity before reserving any promises, so rejection cannot strand waiters.
-    this.trim(unique.filter(key => !this.entries.has(key)).length)
+    this.trim(unique.filter(key => !this.entries.has(key)).length, new Set(unique))
     const waiting = new Map<string, Promise<Sample<T>>>()
     const missing = new Map<string, { entry: Entry<T>; resolve: (sample: Sample<T>) => void }>()
     for (const key of unique) {
       let entry = this.entries.get(key)
       if (!entry) {
-        entry = { sample: { data: null, updatedAt: null, error: null }, completedAt: null, retryAt: 0, failures: 0 }
+        entry = { sample: { data: null, updatedAt: null, error: null }, settledAt: null, intervalMs, retryAt: 0, failures: 0 }
         this.entries.set(key, entry)
       }
+      entry.intervalMs = intervalMs
       if (entry.pending) { waiting.set(key, entry.pending); continue }
-      const fresh = !entry.sample.error && entry.completedAt !== null && this.now() < entry.completedAt + intervalMs
-      if (fresh || this.now() < entry.retryAt) { waiting.set(key, Promise.resolve(entry.sample)); continue }
+      const cooling = entry.settledAt !== null && this.now() < entry.settledAt + intervalMs
+      if (cooling || this.now() < entry.retryAt) { waiting.set(key, Promise.resolve(entry.sample)); continue }
       let resolve!: (sample: Sample<T>) => void
       entry.pending = new Promise(r => { resolve = r })
       waiting.set(key, entry.pending)
@@ -43,12 +45,15 @@ export class DemandCache<T> {
       for (const [key, { entry, resolve }] of missing) {
         const value = values.get(key) ?? new Error('响应缺少所需数据')
         const now = this.now()
+        entry.settledAt = now
         if (value instanceof Error) {
           entry.failures++
-          entry.retryAt = now + Math.min(600_000, intervalMs * 2 ** Math.min(entry.failures - 1, 8))
+          entry.retryAt = Math.max(
+            now + Math.min(600_000, intervalMs * 2 ** Math.min(entry.failures - 1, 8)),
+            value instanceof UpstreamError ? value.retryAt ?? 0 : 0,
+          )
           entry.sample = { ...entry.sample, error: value.message }
         } else {
-          entry.completedAt = now
           entry.failures = 0
           entry.retryAt = 0
           entry.sample = { data: value, updatedAt: now, error: null }
@@ -60,11 +65,11 @@ export class DemandCache<T> {
     return Object.fromEntries(await Promise.all([...waiting].map(async ([key, promise]) => [key, await promise])))
   }
 
-  private trim(incoming: number) {
+  private trim(incoming: number, requested: Set<string>) {
     if (this.entries.size + incoming <= this.maxEntries) return
     for (const [key, entry] of this.entries) {
       // Never evict in-flight work or an unexpired cooldown to make room.
-      if (!entry.pending && this.now() > Math.max(entry.retryAt, (entry.completedAt ?? 0) + 600_000)) {
+      if (!requested.has(key) && !entry.pending && this.now() > Math.max(entry.retryAt, (entry.settledAt ?? 0) + Math.max(600_000, entry.intervalMs))) {
         this.entries.delete(key)
         if (this.entries.size + incoming <= this.maxEntries) break
       }

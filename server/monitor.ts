@@ -7,9 +7,10 @@ import { UpstreamError, type Upstream } from './upstream'
 export class Monitor {
   private directoryCache = new DemandCache<Account[]>()
   private accountsCache = new DemandCache<Account>()
-  private todayCache = new DemandCache<TodayStats>()
+  private todayCache = new DemandCache<{ day: string; stats: TodayStats }>()
   private usageCache = new DemandCache<Usage>()
-  private spendingCache = new DemandCache<number>()
+  private costCache = new DemandCache<string>()
+  private spendingCache = new DemandCache<{ amount: number; updatedAt: number }>()
   private adminCache = new DemandCache<number[]>()
   private batchUsageSupported = true
   constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {}
@@ -34,8 +35,7 @@ export class Monitor {
   accounts() {
     return this.directoryCache.get('directory', 60_000, async () => (await this.directory('accounts', AbortSignal.timeout(30_000))).map(normalizeAccount))
   }
-  details(ids: number[]) {
-    const signal = AbortSignal.timeout(30_000)
+  details(ids: number[], signal = AbortSignal.timeout(30_000)) {
     return this.accountsCache.getMany(ids.map(String), this.intervals.status * 1000, async missing => new Map<string, Account | Error>(await Promise.all(missing.map(async id => {
       try {
         const account = normalizeAccount(await this.upstream.request(`accounts/${id}`, { signal }))
@@ -46,20 +46,26 @@ export class Monitor {
   }
   async today(ids: number[]) {
     const day = dateInZone(new Date(), this.serverTimeZone)
-    const result = await this.todayCache.getMany(ids.map(id => `${day}:${id}`), this.intervals.status * 1000, async missing => {
-      const raw = object(await this.upstream.request('accounts/today-stats/batch', { body: { account_ids: missing.map(key => Number(key.split(':')[1])) } }))
+    const result = await this.todayCache.getMany(ids.map(String), this.intervals.status * 1000, async missing => {
+      const raw = object(await this.upstream.request('accounts/today-stats/batch', { body: { account_ids: missing.map(Number) } }))
       const stats = object(raw.stats)
-      return new Map<string, TodayStats | Error>(missing.map(key => {
-        try { return [key, normalizeToday(stats[key.split(':')[1]])] as const }
+      return new Map<string, { day: string; stats: TodayStats } | Error>(missing.map(key => {
+        try { return [key, { day, stats: normalizeToday(stats[key]) }] as const }
         catch (error) { return [key, error as Error] as const }
       }))
     })
-    return { day, items: Object.fromEntries(ids.map(id => [id, result[`${day}:${id}`]])) }
+    return { day, items: Object.fromEntries(ids.map(id => {
+      const sample = result[id]
+      // Keep the throttle key stable across midnight, but never label yesterday as today.
+      return [id, sample.data?.day === day
+        ? { ...sample, data: sample.data.stats }
+        : { data: null, updatedAt: null, error: sample.error }]
+    })) }
   }
   async quota(ids: number[]) {
-    const accounts = await this.details(ids)
-    const eligible = ids.filter(id => accounts[id]?.data?.supportsUsage)
     const signal = AbortSignal.timeout(30_000)
+    const accounts = await this.details(ids, signal)
+    const eligible = ids.filter(id => !accounts[id]?.error && accounts[id]?.data?.supportsUsage)
     return this.usageCache.getMany(eligible.map(String), this.intervals.quota * 1000, async missing => {
       if (this.batchUsageSupported) {
         try {
@@ -85,15 +91,22 @@ export class Monitor {
       })))
     })
   }
-  private readSpending(accountId: number, start: string, day: string, timeZone: string, includeAdmin: boolean, signal: AbortSignal) {
-    return this.spendingCache.get(JSON.stringify([accountId, start, day, timeZone, includeAdmin]), this.intervals.spending * 1000, async () => {
-        let admins: number[] = []
-        if (!includeAdmin) {
-          const result = await this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number))
-          if (result.error || !result.data) throw new Error('Admin 名单读取失败，未生成排除 Admin 的统计')
-          admins = result.data
-        }
-        const cost = async (userId?: number) => {
+  private async readSpending(accountId: number, start: string, day: string, timeZone: string, includeAdmin: boolean, signal: AbortSignal): Promise<Sample<number>> {
+    // Only raw upstream scopes have a TTL. Recompute the projection from those
+    // shared samples to avoid duplicating totals or adding a second stale window.
+    // This zero-TTL cache coalesces calculations and retains the last valid result.
+    const result = await this.spendingCache.get(JSON.stringify([accountId, start, day, timeZone, includeAdmin]), 0, async () => {
+      let admins: number[] = []
+      const timestamps: number[] = []
+      if (!includeAdmin) {
+        const sample = await this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number))
+        if (sample.error || !sample.data) throw new Error('Admin 名单读取失败，未生成排除 Admin 的统计')
+        admins = sample.data
+        timestamps.push(sample.updatedAt!)
+      }
+      const cost = async (userId?: number) => {
+        const key = JSON.stringify([accountId, start, day, timeZone, userId ?? null])
+        const sample = await this.costCache.get(key, this.intervals.spending * 1000, async () => {
           const raw = object(await this.upstream.request('usage/stats', { signal, query: {
             account_id: String(accountId), start_date: start, end_date: day, timezone: timeZone, nocache: 'true',
             ...(userId === undefined ? {} : { user_id: String(userId) }),
@@ -102,19 +115,24 @@ export class Monitor {
           let value: Decimal
           try { value = new Decimal(raw.total_actual_cost) } catch { throw new Error('消费格式无效') }
           if (!value.isFinite() || value.isNegative()) throw new Error('消费数据无效')
-          return value
-        }
-        let excluded = new Decimal(0)
-        for (const id of admins) excluded = excluded.plus(await cost(id))
-        const amount = (await cost()).minus(excluded)
-        if (amount.isNegative() || !Number.isFinite(amount.toNumber())) throw new Error('扣费统计口径不一致，请稍后重试')
-        return amount.toNumber()
-      })
+          return value.toString()
+        })
+        if (sample.error || sample.data === null) throw new Error(sample.error ?? '消费数据缺失')
+        timestamps.push(sample.updatedAt!)
+        return new Decimal(sample.data)
+      }
+      let excluded = new Decimal(0)
+      for (const id of admins) excluded = excluded.plus(await cost(id))
+      const amount = (await cost()).minus(excluded)
+      if (amount.isNegative() || !Number.isFinite(amount.toNumber())) throw new Error('扣费统计口径不一致，请稍后重试')
+      return { amount: amount.toNumber(), updatedAt: Math.min(...timestamps) }
+    })
+    return { data: result.data?.amount ?? null, updatedAt: result.data?.updatedAt ?? null, error: result.error }
   }
   async dailySpending(input: DailySpendingRequest) {
     const day = dateInZone(new Date(), input.timeZone)
-    const accounts = await this.details(input.ids)
     const signal = AbortSignal.timeout(30_000)
+    const accounts = await this.details(input.ids, signal)
     const items = await Promise.all(input.ids.map(async id => {
       const account = accounts[id]
       const value: Sample<number> = !account?.data || account.error
@@ -126,11 +144,11 @@ export class Monitor {
   }
   async spending(input: SpendingRequest): Promise<{ day: string; rows: SpendingRow[] }> {
     const day = dateInZone(new Date(), input.timeZone)
-    const accounts = await this.details(input.subscriptions.map(s => s.accountId))
     const signal = AbortSignal.timeout(30_000)
+    const accounts = await this.details(input.subscriptions.map(s => s.accountId), signal)
     const rows = await Promise.all(input.subscriptions.map(async subscription => {
       const cycle = subscriptionCycle(day, subscription.renewalDay)
-      const invalid = !accounts[subscription.accountId]?.data || accounts[subscription.accountId]?.data?.type !== 'oauth'
+      const invalid = !!accounts[subscription.accountId]?.error || !accounts[subscription.accountId]?.data || accounts[subscription.accountId]?.data?.type !== 'oauth'
       const failure: Sample<number> = { data: null, updatedAt: null, error: invalid ? '仅可读取有效 OAuth 账号的订阅消费' : null }
       if (invalid) return { accountId: subscription.accountId, cycle, today: failure, spending: failure }
       const read = (start: string) => this.readSpending(subscription.accountId, start, day, input.timeZone, input.includeAdmin, signal)
