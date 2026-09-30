@@ -15,7 +15,7 @@ const Context = createContext<{ preferences: Preferences; update: (change: Parti
 export function PreferencesProvider({ config, children }: { config: PublicConfig; children: ReactNode }) {
   const key = `sub2api-manager:v1:${config.instanceId}`
   const [preferences, setPreferences] = useState<Preferences>(() => {
-    const fallback: Preferences = { pins: config.demo ? [1, 2, 4] : [], subscriptions: config.demo ? [{ accountId: 1, price: 20, renewalDay: 15 }, { accountId: 2, price: 20, renewalDay: 8 }] : [],
+    const fallback: Preferences = { pins: [], subscriptions: [],
       includeAdmin: true, timeZone: Intl.DateTimeFormat().resolvedOptions().timeZone, actualCurrency: '$', costCurrency: '$', hideAmounts: false, theme: 'system' }
     try { return preferencesSchema.parse(JSON.parse(localStorage.getItem(key) ?? 'null')) } catch { return fallback }
   })

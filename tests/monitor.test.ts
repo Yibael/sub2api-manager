@@ -3,7 +3,7 @@ import { Monitor } from '../server/monitor'
 import { defaultIntervals } from '../shared/domain'
 import { UpstreamError } from '../server/upstream'
 import type { Upstream } from '../server/upstream'
-import { demoUpstream } from '../server/demo'
+import { fixtureUpstream } from './fixtures/upstream'
 
 beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00Z')) })
 afterEach(() => vi.useRealTimers())
@@ -107,7 +107,7 @@ describe('monitor queries', () => {
 
 describe('all upstream demand paths', () => {
   it('shares directory, status, today, quota, Admin and spending work across 20 clients at interval boundaries', async () => {
-    const request = vi.fn<Upstream['request']>(demoUpstream.request)
+    const request = vi.fn<Upstream['request']>(fixtureUpstream.request)
     const monitor = new Monitor({ request }, { ...defaultIntervals }, 'Asia/Shanghai')
     const scope = { timeZone: 'Asia/Shanghai', includeAdmin: false }
     const subscriptions = [{ accountId: 1, price: 20, renewalDay: 15 }]
@@ -138,7 +138,7 @@ describe('all upstream demand paths', () => {
     expect(counts().accounts).toBe(2)
   })
   it('coalesces overlapping concurrent quota batches per account', async () => {
-    const request = vi.fn<Upstream['request']>(demoUpstream.request)
+    const request = vi.fn<Upstream['request']>(fixtureUpstream.request)
     const monitor = new Monitor({ request }, { ...defaultIntervals }, 'Asia/Shanghai')
     await Promise.all([monitor.quota([1, 2]), monitor.quota([2, 3]), monitor.quota([3, 1])])
     const ids = request.mock.calls.filter(([path]) => path === 'accounts/usage/batch')
@@ -169,7 +169,7 @@ describe('all upstream demand paths', () => {
     let failed = false
     const request = vi.fn<Upstream['request']>(async (path, options) => {
       if (failed && path === 'accounts/1') throw new Error('account unavailable')
-      return demoUpstream.request(path, options)
+      return fixtureUpstream.request(path, options)
     })
     const monitor = new Monitor({ request }, { ...defaultIntervals }, 'UTC')
     await monitor.details([1])

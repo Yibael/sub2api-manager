@@ -2,19 +2,32 @@ import { afterEach, describe, expect, it, vi } from 'vitest'
 import { createApp } from '../server/app'
 import { Monitor } from '../server/monitor'
 import { defaultIntervals } from '../shared/domain'
-import { demoUpstream } from '../server/demo'
+import { fixtureUpstream } from './fixtures/upstream'
 
 afterEach(() => vi.useRealTimers())
 
-function setup() {
-  const upstream = { request: vi.fn(demoUpstream.request) }, monitor = new Monitor(upstream, { ...defaultIntervals }, 'UTC')
+function setup(configured = true) {
+  const upstream = { request: vi.fn(fixtureUpstream.request) }, monitor = new Monitor(upstream, { ...defaultIntervals }, 'UTC')
   const saveIntervals = vi.fn(async () => {})
-  const app = createApp({ monitor, password: 'test-password-long-enough', origin: 'https://manager.example', secureCookie: true,
-    serverUrl: 'https://upstream.example', instanceName: 'test', instanceId: 'test-id', demo: false, saveIntervals }).compile()
+  const app = createApp({ monitor: configured ? monitor : null, password: 'test-password-long-enough', origin: 'https://manager.example', secureCookie: true,
+    serverUrl: 'https://upstream.example', instanceName: 'test', instanceId: 'test-id', saveIntervals }).compile()
   const request = (path: string, body?: unknown, cookie?: string, origin = 'https://manager.example', method = 'POST') => app.handle(new Request(`https://manager.example/api${path}`, { method: body === undefined ? 'GET' : method, headers: { ...(cookie ? { cookie } : {}), origin, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }))
   return { request, upstream, saveIntervals }
 }
 describe('application boundary', () => {
+  it('returns setup state without fallback accounts or automatic authentication when unconfigured', async () => {
+    const { request, upstream } = setup(false)
+    const config = await (await request('/config')).json()
+    expect(config.configured).toBe(false)
+    expect(config.authenticated).toBe(false)
+    expect(config.serverUrl).toBe('')
+    expect(config).not.toHaveProperty('demo')
+    expect((await request('/accounts')).status).toBe(401)
+    const login = await request('/login', { password: 'test-password-long-enough' })
+    const cookie = login.headers.get('set-cookie')!.split(';')[0]
+    expect((await request('/accounts', undefined, cookie)).status).toBe(503)
+    expect(upstream.request).not.toHaveBeenCalled()
+  })
   it('rejects unauthenticated queries before accessing the upstream', async () => {
     const { request, upstream } = setup()
     const config = await request('/config')

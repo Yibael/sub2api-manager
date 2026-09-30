@@ -5,7 +5,6 @@
   "type": "module",
   "scripts": {
     "dev": "concurrently -k -n api,web \"bun --watch server/index.ts\" \"vite\"",
-    "dev:demo": "DEMO_MODE=true bun run dev",
     "dev:server": "bun --watch server/index.ts",
     "build": "bun run typecheck && vite build",
     "start": "NODE_ENV=production bun server/index.ts",

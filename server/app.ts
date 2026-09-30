@@ -6,7 +6,7 @@ import type { Monitor } from './monitor'
 
 export interface AppOptions {
   monitor: Monitor | null; password: string; origin: string; secureCookie: boolean;
-  serverUrl: string; instanceName: string; instanceId: string; demo: boolean;
+  serverUrl: string; instanceName: string; instanceId: string;
   saveIntervals: (value: z.infer<typeof intervalsSchema>) => Promise<void>
 }
 export function createApp(options: AppOptions) {
@@ -15,7 +15,7 @@ export function createApp(options: AppOptions) {
   let failures = 0, blockedUntil = 0
   const sessionName = 'sub2manager_session'
   const sessionKey = (value: string) => createHash('sha256').update(value).digest('hex')
-  const authenticated = (cookieValue: unknown) => options.demo || (typeof cookieValue === 'string' && (sessions.get(sessionKey(cookieValue)) ?? 0) > Date.now())
+  const authenticated = (cookieValue: unknown) => typeof cookieValue === 'string' && (sessions.get(sessionKey(cookieValue)) ?? 0) > Date.now()
   const idsSchema = z.object({ ids: z.array(z.number().int().positive()).max(100).transform(ids => [...new Set(ids)]) })
   return new Elysia({ name: 'sub2api-manager', prefix: '/api' })
     .onRequest(({ request, set }) => {
@@ -32,7 +32,7 @@ export function createApp(options: AppOptions) {
     })
     .get('/config', ({ cookie }): PublicConfig => {
       const auth = authenticated(cookie[sessionName].value)
-      return { configured: !!options.monitor, authenticated: auth, demo: options.demo,
+      return { configured: !!options.monitor, authenticated: auth,
         instanceId: options.instanceId, instanceName: options.instanceName,
         serverUrl: auth ? options.serverUrl : '', serverTimeZone: options.monitor?.serverTimeZone ?? 'UTC',
         intervals: options.monitor?.intervals ?? { status: 5, quota: 30, spending: 15 } }
