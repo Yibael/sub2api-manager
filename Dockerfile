@@ -1,14 +1,12 @@
 # syntax=docker/dockerfile:1
-ARG BUN_VERSION=1.3.9
-
-FROM oven/bun:${BUN_VERSION} AS build
+FROM oven/bun:1.3.9 AS build
 WORKDIR /app
 COPY package.json bun.lock ./
 RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 COPY . .
 RUN bun run build && bun run build:server
 
-FROM oven/bun:${BUN_VERSION}-slim AS runtime
+FROM oven/bun:1.3.9-slim AS runtime
 WORKDIR /app
 LABEL org.opencontainers.image.title="Sub2api Manager" \
       org.opencontainers.image.description="Mobile-first sub2api monitoring PWA"

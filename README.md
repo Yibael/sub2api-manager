@@ -18,7 +18,7 @@ cp .env.example .env
 - `SUB2API_TIMEZONE`：与 sub2api 今日统计一致的 IANA 时区，例如 `Asia/Shanghai`。
 
 ```sh
-bun run dev
+APP_ORIGIN=http://localhost:5173 bun run dev
 ```
 
 使用 `http://localhost:5173`。开发 API 默认监听 `127.0.0.1:3001`，由 Vite 同源代理。
@@ -55,14 +55,14 @@ APP_ORIGIN=https://manager.example.com bun run start
 
 生产由 Elysia 同时提供 `dist` 静态资源、SPA 路由回退和 `/api`。在前面配置 HTTPS 反向代理；代理到 `127.0.0.1:3001`，保持路径与请求 `Origin`。不要将管理员密钥放入任何 `VITE_` 环境变量。
 
-Docker Compose：
+本地开发和 Docker 共用一份 `.env`。已有文件时直接修改，无需再次复制。Docker Compose：
 
 ```sh
-cp .env.docker.example .env.docker
-chmod 600 .env.docker
-# 编辑 .env.docker，填写真实连接、访问密码和 HTTPS 来源
-docker compose --env-file .env.docker config --quiet
-docker compose --env-file .env.docker up -d --build --wait --wait-timeout 120
+cp .env.example .env
+chmod 600 .env
+# 编辑 .env，填写真实连接、访问密码和 HTTPS 来源
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 120
 ```
 
 镜像采用多阶段构建，服务端打包后无需运行时 `node_modules`；容器使用非 root 用户和只读根文件系统。共享刷新设置保存到 `/app/data` 命名卷。宿主端口默认只绑定 `127.0.0.1:3001`，通过现有 HTTPS 反向代理对外提供访问。

@@ -7,21 +7,29 @@
 | `Dockerfile` | 多阶段构建前端与服务端，最终镜像只包含 Bun 和应用产物 |
 | `.dockerignore` | 排除环境文件、本地数据、Git、依赖目录及旧构建产物 |
 | `compose.yaml` | 单实例应用、持久化卷、回环端口及运行配置 |
-| `.env.docker.example` | 容器部署专用环境变量模板 |
+| `.env.example` | 本地开发与容器部署共用的环境变量模板 |
 | `scripts/healthcheck.ts` | 检查容器内应用响应及配置是否已加载，不请求 sub2api |
 
-需要 Docker Engine、BuildKit 和 Docker Compose v2。镜像使用与 `package.json` 一致的 Bun 1.3.9；升级时同步修改 `packageManager`、Dockerfile 和环境模板默认版本。构建使用锁文件，凭据仅在运行时传入。
+需要 Docker Engine、BuildKit 和 Docker Compose v2。镜像使用与 `package.json` 一致的 Bun 1.3.9；版本固定在 Dockerfile 中，升级时同步修改 `packageManager` 和 Dockerfile，无需用户配置。构建使用锁文件，凭据仅在运行时传入。
 
 ## 首次启动
 
 在项目根目录执行：
 
 ```sh
-cp .env.docker.example .env.docker
-chmod 600 .env.docker
+cp .env.example .env
+chmod 600 .env
 ```
 
-编辑 `.env.docker`：
+已有 `.env` 时直接编辑，不要重新复制覆盖。本地开发和 Docker 共用这一份文件；Compose 自动读取项目根目录的 `.env`。
+
+本地开发可仅在启动时覆盖访问地址：
+
+```sh
+APP_ORIGIN=http://localhost:5173 bun run dev
+```
+
+编辑 `.env`：
 
 | 变量 | 配置 |
 | --- | --- |
@@ -30,17 +38,16 @@ chmod 600 .env.docker
 | `SUB2API_ADMIN_KEY` | sub2api Admin API Key |
 | `APP_PASSWORD` | 应用独立访问密码，至少 16 个字符 |
 | `SUB2API_TIMEZONE` | 与上游今日统计一致的时区，默认 `Asia/Shanghai` |
-| `APP_PORT` | 宿主机回环端口，默认 `3001`；容器内部固定使用 `3001` |
+| `PORT` | 本地 API 端口或 Docker 宿主机回环端口，默认 `3001`；容器内部固定使用 `3001` |
 | `INSTANCE_NAME` | 工作空间名称 |
 | `ALLOW_HTTP_UPSTREAM` | 上游使用 HTTP 时显式设为 `true`，不会改变浏览器入口的 HTTPS 要求 |
-| `SUB2API_MANAGER_IMAGE` | 本地构建的镜像名称与标签，默认 `sub2api-manager:local` |
 
-密码或密钥包含 `$`、`#` 等字符时，保留模板中的单引号，避免 Compose 展开或截断。不要使用开发用的 `.env` 代替这个文件；不要把密钥写进 Dockerfile、构建参数或 `VITE_` 变量。
+密码或密钥保留模板中的双引号，美元符号写成 `\$`，例如实际密码中的 `abc$def` 在文件中写作 `"abc\$def"`。这一写法同时兼容 Bun 和 Compose，也避免 `#` 被当作注释。不要把密钥写进 Dockerfile、构建参数或 `VITE_` 变量。
 
 ```sh
-docker compose --env-file .env.docker config --quiet
-docker compose --env-file .env.docker up -d --build --wait --wait-timeout 120
-docker compose --env-file .env.docker ps
+docker compose config --quiet
+docker compose up -d --build --wait --wait-timeout 120
+docker compose ps
 ```
 
 必填变量为空时 Compose 会拒绝启动；密码长度、HTTPS 和时区由应用启动检查。`config --quiet` 只校验，不输出展开后的凭据。
@@ -79,46 +86,32 @@ manager.example.com {
 更新代码后重新构建并启动：
 
 ```sh
-docker compose --env-file .env.docker up -d --build --wait --wait-timeout 120
-docker compose --env-file .env.docker logs --tail=100 app
+docker compose up -d --build --wait --wait-timeout 120
+docker compose logs --tail=100 app
 ```
 
-修改 `.env.docker` 后使用 `up -d` 重新创建服务，单独 `restart` 不会应用新的环境变量。
+修改 `.env` 后使用 `up -d` 重新创建服务，单独 `restart` 不会应用新的环境变量。
 
 ```sh
-docker compose --env-file .env.docker up -d --wait --wait-timeout 120
+docker compose up -d --wait --wait-timeout 120
 ```
 
 停止应用但保留数据卷：
 
 ```sh
-docker compose --env-file .env.docker down
+docker compose down
 ```
 
 首次构建需要访问镜像和包仓库。若拉取或安装失败，检查部署机的网络和 Docker 代理配置。`bun.lock` 固定了依赖及其下载地址，单纯更改 npm 默认 registry 不一定替换锁文件中的地址。
 
-## 单独构建与跨架构
+## 构建方式
 
-```sh
-docker build -t sub2api-manager:local .
-```
+Compose 使用 `build: .`，默认读取项目根目录的 Dockerfile，并自动为构建结果命名。日常部署只需 `docker compose up -d --build`，不需要手动设置镜像名或 Bun 版本。需要发布到镜像仓库时，再为相应发布流程添加镜像标签。
 
-默认生成当前 Docker 引擎架构的镜像。Apple Silicon 上构建用于 x86 服务器的镜像时，可指定：
-
-```sh
-docker build --platform linux/amd64 -t sub2api-manager:amd64 .
-docker save -o /tmp/sub2api-manager-amd64.tar sub2api-manager:amd64
-```
-
-目标服务器加载镜像后，将 `.env.docker` 中的 `SUB2API_MANAGER_IMAGE` 设置为对应标签，并跳过重新构建：
-
-```sh
-docker load -i /path/to/sub2api-manager-amd64.tar
-docker compose --env-file .env.docker up -d --no-build --wait --wait-timeout 120
-```
-
-目标机仍需 `compose.yaml` 和填写后的 `.env.docker`。实际多架构构建取决于 Docker 引擎提供的构建器与架构模拟支持。
+默认生成当前 Docker 引擎架构的镜像；跨架构构建需要引擎提供对应的构建器或模拟支持。
 
 ## 本次验证
 
 已在 `linux/arm64` 上实际构建镜像，并使用独立 Compose 项目验证：健康检查、登录鉴权、静态资源、SPA 路由、PWA 清单、只读根文件系统、非 root 用户、设置写入及容器重建后的数据保留。58 项 Vitest 测试、类型检查和 Lint 通过。验收只使用占位连接参数，没有访问真实 sub2api；`linux/amd64` 构建和实际 HTTPS 入口未在本次验收中运行。
+
+统一配置后另行验证了默认 `.env` 读取、`build: .` 自动命名镜像、宿主机与容器端口区分，以及包含美元符号的密码在 Bun 与 Compose 中保持一致并可正常登录。
