@@ -1,19 +1,24 @@
-FROM oven/bun:1 AS build
+# syntax=docker/dockerfile:1
+ARG BUN_VERSION=1.3.9
+
+FROM oven/bun:${BUN_VERSION} AS build
 WORKDIR /app
 COPY package.json bun.lock ./
-RUN bun install --frozen-lockfile
+RUN --mount=type=cache,target=/root/.bun/install/cache bun install --frozen-lockfile
 COPY . .
-RUN bun run build
+RUN bun run build && bun run build:server
 
-FROM oven/bun:1 AS runtime
+FROM oven/bun:${BUN_VERSION}-slim AS runtime
 WORKDIR /app
-COPY --from=build /app/node_modules ./node_modules
+LABEL org.opencontainers.image.title="Sub2api Manager" \
+      org.opencontainers.image.description="Mobile-first sub2api monitoring PWA"
 COPY --from=build /app/dist ./dist
-COPY --from=build /app/server ./server
-COPY --from=build /app/shared ./shared
-COPY --from=build /app/package.json ./package.json
+COPY --from=build /app/build/server.js ./server.js
+COPY scripts/healthcheck.ts ./healthcheck.ts
 RUN mkdir /app/data && chown bun:bun /app/data
 USER bun
 ENV NODE_ENV=production HOST=0.0.0.0 PORT=3001 DATA_DIR=/app/data
 EXPOSE 3001
-CMD ["bun", "run", "server/index.ts"]
+HEALTHCHECK --interval=30s --timeout=5s --start-period=10s --retries=3 \
+  CMD ["bun", "/app/healthcheck.ts"]
+CMD ["bun", "/app/server.js"]

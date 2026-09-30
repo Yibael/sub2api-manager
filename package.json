@@ -7,6 +7,7 @@
     "dev": "concurrently -k -n api,web \"bun --watch server/index.ts\" \"vite\"",
     "dev:server": "bun --watch server/index.ts",
     "build": "bun run typecheck && vite build",
+    "build:server": "bun build --target=bun --env=disable --outfile=build/server.js server/index.ts",
     "start": "NODE_ENV=production bun server/index.ts",
     "preview": "vite preview",
     "icons": "bun scripts/icons.ts",

@@ -1,0 +1,44 @@
+name: sub2api-manager
+
+services:
+  app:
+    image: ${SUB2API_MANAGER_IMAGE:-sub2api-manager:local}
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUN_VERSION: ${BUN_VERSION:-1.3.9}
+    restart: unless-stopped
+    init: true
+    stop_grace_period: 30s
+    environment:
+      NODE_ENV: production
+      HOST: 0.0.0.0
+      PORT: "3001"
+      DATA_DIR: /app/data
+      APP_ORIGIN: ${APP_ORIGIN:?Set APP_ORIGIN in .env.docker to the public HTTPS origin}
+      SUB2API_URL: ${SUB2API_URL:?Set SUB2API_URL in .env.docker}
+      SUB2API_ADMIN_KEY: ${SUB2API_ADMIN_KEY:?Set SUB2API_ADMIN_KEY in .env.docker}
+      APP_PASSWORD: ${APP_PASSWORD:?Set APP_PASSWORD in .env.docker to at least 16 characters}
+      INSTANCE_NAME: ${INSTANCE_NAME:-我的工作空间}
+      SUB2API_TIMEZONE: ${SUB2API_TIMEZONE:-Asia/Shanghai}
+      ALLOW_HTTP_UPSTREAM: ${ALLOW_HTTP_UPSTREAM:-false}
+    ports:
+      - "127.0.0.1:${APP_PORT:-3001}:3001"
+    volumes:
+      - app-data:/app/data
+    read_only: true
+    tmpfs:
+      - /tmp:rw,noexec,nosuid,size=64m
+    cap_drop:
+      - ALL
+    security_opt:
+      - no-new-privileges:true
+    logging:
+      driver: json-file
+      options:
+        max-size: "10m"
+        max-file: "3"
+
+volumes:
+  app-data:

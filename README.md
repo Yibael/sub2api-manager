@@ -55,21 +55,19 @@ APP_ORIGIN=https://manager.example.com bun run start
 
 生产由 Elysia 同时提供 `dist` 静态资源、SPA 路由回退和 `/api`。在前面配置 HTTPS 反向代理；代理到 `127.0.0.1:3001`，保持路径与请求 `Origin`。不要将管理员密钥放入任何 `VITE_` 环境变量。
 
-Docker：
+Docker Compose：
 
 ```sh
-docker build -t sub2api-manager .
-docker run --name sub2api-manager -d \
-  --env-file .env \
-  -e APP_ORIGIN=https://manager.example.com \
-  -e HOST=0.0.0.0 \
-  -e DATA_DIR=/app/data \
-  -p 127.0.0.1:3001:3001 \
-  -v sub2api-manager-data:/app/data \
-  sub2api-manager
+cp .env.docker.example .env.docker
+chmod 600 .env.docker
+# 编辑 .env.docker，填写真实连接、访问密码和 HTTPS 来源
+docker compose --env-file .env.docker config --quiet
+docker compose --env-file .env.docker up -d --build --wait --wait-timeout 120
 ```
 
-需要容器监听所有容器内网卡，宿主端口只绑定回环地址。通过 HTTPS 反向代理对外提供访问。
+镜像采用多阶段构建，服务端打包后无需运行时 `node_modules`；容器使用非 root 用户和只读根文件系统。共享刷新设置保存到 `/app/data` 命名卷。宿主端口默认只绑定 `127.0.0.1:3001`，通过现有 HTTPS 反向代理对外提供访问。
+
+健康检查只读取容器内配置接口，不触发 sub2api 查询。详细环境变量、HTTPS 接入、更新和跨架构构建见 [docs/docker.md](docs/docker.md)。
 
 当前使用单进程缓存与内存会话，部署一个应用进程；进程重启后需要重新登录，数据在下一次请求时重建。多副本共享缓存、跨设备偏好同步和后台推送不在本版范围。
 
