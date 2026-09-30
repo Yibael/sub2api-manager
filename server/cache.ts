@@ -1,22 +1,31 @@
 import type { Sample } from '../shared/domain'
 import { UpstreamError } from './upstream'
 
-interface Entry<T> { sample: Sample<T>; settledAt: number | null; intervalMs: number; retryAt: number; failures: number; pending?: Promise<Sample<T>> }
+interface Entry<T> { sample: Sample<T>; settledAt: number | null; intervalMs: number; retryAt: number; failures: number; pending?: Promise<Sample<T>>; pendingForce?: boolean }
 
 /** Demand-only cache. No timers, refresh jobs, or detached retries. */
 export class DemandCache<T> {
   private entries = new Map<string, Entry<T>>()
   constructor(private readonly maxEntries = 5000, private readonly now = () => Date.now()) {}
 
-  async get(key: string, intervalMs: number, load: () => Promise<T>): Promise<Sample<T>> {
+  async get(key: string, intervalMs: number, load: () => Promise<T>, force = false): Promise<Sample<T>> {
     const result = await this.getMany([key], intervalMs, async () => {
       try { return new Map([[key, await load()]]) } catch (error) { return new Map([[key, safeError(error)]]) }
-    })
+    }, force)
     return result[key]
   }
 
-  async getMany(keys: string[], intervalMs: number, load: (missing: string[]) => Promise<Map<string, T | Error>>): Promise<Record<string, Sample<T>>> {
+  async getMany(keys: string[], intervalMs: number, load: (missing: string[]) => Promise<Map<string, T | Error>>, force = false): Promise<Record<string, Sample<T>>> {
     const unique = [...new Set(keys)]
+    // A force request must not reuse an ordinary request that may hit upstream caches.
+    const ordinary = force ? unique.flatMap(key => {
+      const entry = this.entries.get(key)
+      return entry?.pending && !entry.pendingForce ? [entry.pending] : []
+    }) : []
+    if (ordinary.length) {
+      await Promise.all(ordinary)
+      return this.getMany(unique, intervalMs, load, force)
+    }
     // Check capacity before reserving any promises, so rejection cannot strand waiters.
     this.trim(unique.filter(key => !this.entries.has(key)).length, new Set(unique))
     const waiting = new Map<string, Promise<Sample<T>>>()
@@ -30,9 +39,10 @@ export class DemandCache<T> {
       entry.intervalMs = intervalMs
       if (entry.pending) { waiting.set(key, entry.pending); continue }
       const cooling = entry.settledAt !== null && this.now() < entry.settledAt + intervalMs
-      if (cooling || this.now() < entry.retryAt) { waiting.set(key, Promise.resolve(entry.sample)); continue }
+      if ((!force && cooling) || this.now() < entry.retryAt) { waiting.set(key, Promise.resolve(entry.sample)); continue }
       let resolve!: (sample: Sample<T>) => void
       entry.pending = new Promise(r => { resolve = r })
+      entry.pendingForce = force
       waiting.set(key, entry.pending)
       missing.set(key, { entry, resolve })
     }
@@ -59,6 +69,7 @@ export class DemandCache<T> {
           entry.sample = { data: value, updatedAt: now, error: null }
         }
         entry.pending = undefined
+        entry.pendingForce = undefined
         resolve(entry.sample)
       }
     }

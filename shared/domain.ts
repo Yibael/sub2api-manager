@@ -15,12 +15,12 @@ export const subscriptionSchema = z.object({
 })
 export type Subscription = z.infer<typeof subscriptionSchema>
 export const spendingRequestSchema = z.object({
-  subscriptions: z.array(subscriptionSchema).max(100), timeZone: timezoneSchema, includeAdmin: z.boolean(),
+  subscriptions: z.array(subscriptionSchema).max(100), timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
 }).refine(value => new Set(value.subscriptions.map(s => s.accountId)).size === value.subscriptions.length, '账号不能重复')
 export type SpendingRequest = z.infer<typeof spendingRequestSchema>
 export const dailySpendingRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).max(100).transform(ids => [...new Set(ids)]),
-  timeZone: timezoneSchema, includeAdmin: z.boolean(),
+  timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
 })
 export type DailySpendingRequest = z.infer<typeof dailySpendingRequestSchema>
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
@@ -35,7 +35,8 @@ export interface TodayStats { standardCost: number | null; accountCost: number |
 export interface Usage { windows: Quota[]; weeklyCost: number | null; estimatedWeeklyCost: number | null }
 export interface Cycle { start: string; end: string; next: string }
 export interface SpendingRow { accountId: number; cycle: Cycle; today: Sample<number>; spending: Sample<number> }
-export interface PublicConfig { configured: boolean; authenticated: boolean; instanceId: string; instanceName: string; serverUrl: string; serverTimeZone: string; intervals: Intervals }
+export interface LoginResponse { pageToken: string }
+export interface PublicConfig { configured: boolean; authenticated: boolean; instanceId: string; instanceName: string; serverUrl: string; serverTimeZone: string; intervals: Intervals; passkeyAvailable?: boolean; legacyInstanceIds?: string[] }
 
 export function dateInZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)

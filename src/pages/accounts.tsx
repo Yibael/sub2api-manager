@@ -32,7 +32,7 @@ export function AccountsPage() {
     update({ pins })
   }
   const missing = preferences.pins.filter(id => directory.data?.data && !accounts.some(a => a.id === id))
-  return <div className="page-stack"><PageHeading title="账号管理" action={<RefreshButton busy={directory.isFetching} onClick={() => void directory.refetch()} />} /><ErrorNotice message={directory.error?.message ?? directory.data?.error} />
+  return <div className="page-stack"><PageHeading title="账号管理" action={<RefreshButton busy={directory.isFetching} onClick={() => void directory.forceRefresh()} />} /><ErrorNotice message={directory.error?.message ?? directory.data?.error} />
     <div className="account-toolbar"><div className="search-box"><Search className="size-4" /><Input aria-label="搜索账号" placeholder="搜索名称、平台或账号 ID…" value={search} onChange={e => setSearch(e.target.value)} /></div><ToggleGroup type="single" value={filter} onValueChange={value => { if (value) setFilter(value) }} variant="outline"><ToggleGroupItem value="all">全部</ToggleGroupItem><ToggleGroupItem value="pinned">已关注</ToggleGroupItem><ToggleGroupItem value="oauth">OAuth</ToggleGroupItem></ToggleGroup></div>
     <Card><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />账号目录</span></CardTitle><CardDescription>{accounts.length} 个账号 · {preferences.pins.length} 个已关注</CardDescription></CardHeader><CardContent className="account-list">{directory.isLoading ? [1, 2, 3].map(id => <Skeleton key={id} className="m-4 h-20" />) : filtered.length ? filtered.map(account => {
       const pinned = preferences.pins.includes(account.id), subscription = preferences.subscriptions.find(s => s.accountId === account.id)

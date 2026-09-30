@@ -1,6 +1,7 @@
 import { Activity, ArrowUpRight, ChartNoAxesCombined, Coins, Pin, Wallet } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import Decimal from 'decimal.js'
+import { useMemo } from 'react'
 import { useMonitor, type MonitorData } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
 import { AccountCard, ErrorNotice, Metric, Money, NoPins, PageHeading, RefreshButton } from '@/components/common'
@@ -15,9 +16,9 @@ export function spendingTotal(monitor: MonitorData, field: 'today' | 'spending')
 export function DashboardPage() {
   const { preferences } = useWorkspace()
   const monitor = useMonitor()
-  const totals = overviewTotals(preferences.pins, monitor.status.data, monitor.today.data?.items)
+  const totals = useMemo(() => overviewTotals(preferences.pins, monitor.status.data, monitor.today.data?.items), [preferences.pins, monitor.status.data, monitor.today.data?.items])
   const statsError = monitor.spending.data?.rows.some(row => row.spending.error || row.today.error)
-  return <div className="page-stack"><PageHeading title="工作空间概览" action={<RefreshButton countdown={monitor.nextRefreshIn} busy={monitor.isFetching} onClick={() => void monitor.refresh()} />} />
+  return <div className="page-stack"><PageHeading title="概览" action={<RefreshButton countdown={monitor.nextRefreshIn} busy={monitor.quota.isFetching} label="刷新额度" onClick={() => void monitor.refreshQuota()} />} />
     <ErrorNotice message={monitor.status.error?.message ?? monitor.today.error?.message ?? monitor.quota.error?.message ?? monitor.spending.error?.message} />
     <div className="metric-grid">
       <Metric label="今日消费" value={<Money value={spendingTotal(monitor, 'today')} currency={preferences.actualCurrency} />} icon={<Wallet />} loading={monitor.spending.isFetching && !monitor.spending.data} />

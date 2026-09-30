@@ -1,9 +1,12 @@
 import { useState } from 'react'
 import { useForm } from '@tanstack/react-form'
 import { z } from 'zod'
-import { ArrowRight, Unplug } from 'lucide-react'
+import { ArrowRight, Unplug, Fingerprint } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
-import { api } from '@/lib/api'
+import { signInWithPasskey, browserSupportsWebAuthn, passkeyMessage } from '@/lib/passkeys'
+import { PwaUpdate } from '@/components/pwa'
+import { Spinner } from '@/components/ui/spinner'
+import { loginWithPassword } from '@/lib/api'
 import { Brand, ErrorNotice } from '@/components/common'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
@@ -13,20 +16,27 @@ import { Empty, EmptyHeader, EmptyMedia, EmptyTitle } from '@/components/ui/empt
 import type { PublicConfig } from '../../shared/domain'
 
 export function SetupPage({ config }: { config: PublicConfig }) {
+  const [passkeyBusy, setPasskeyBusy] = useState(false)
   const [error, setError] = useState<string | null>(null), queryClient = useQueryClient()
   const form = useForm({ defaultValues: { password: '' }, validators: { onSubmit: z.object({ password: z.string().min(1, '请输入访问密码') }) }, onSubmit: async ({ value }) => {
     setError(null)
-    try { await api('/login', value); await queryClient.invalidateQueries({ queryKey: ['config'] }) } catch (error) { setError((error as Error).message) }
+    try { await loginWithPassword(value.password); await queryClient.invalidateQueries({ queryKey: ['config'] }) } catch (error) { setError((error as Error).message) }
   } })
   return (
     <main className="setup-screen">
       <div className="setup-panel">
         <Brand />
+        <PwaUpdate />
         <Card>
           <CardHeader><CardTitle>{config.configured ? '登录' : '连接设置'}</CardTitle></CardHeader>
           <CardContent>
             {config.configured ? (
               <form onSubmit={e => { e.preventDefault(); void form.handleSubmit() }}>
+                {config.passkeyAvailable && browserSupportsWebAuthn() && <Button type="button" variant="outline" className="w-full mb-5" disabled={passkeyBusy || form.state.isSubmitting} onClick={async () => {
+                  setPasskeyBusy(true); setError(null)
+                  try { await signInWithPasskey(); await queryClient.invalidateQueries({ queryKey: ['config'] }) }
+                  catch (error) { setError(passkeyMessage(error)) } finally { setPasskeyBusy(false) }
+                }}>{passkeyBusy ? <Spinner data-icon="inline-start" /> : <Fingerprint data-icon="inline-start" />}使用 Passkey 登录</Button>}
                 <FieldGroup>
                   <form.Field name="password">{field => (
                     <Field data-invalid={!field.state.meta.isValid}>
@@ -37,7 +47,7 @@ export function SetupPage({ config }: { config: PublicConfig }) {
                   )}</form.Field>
                 </FieldGroup>
                 <form.Subscribe selector={state => state.isSubmitting}>{pending => (
-                  <Button disabled={pending} type="submit" className="mt-5 w-full">
+                  <Button disabled={pending || passkeyBusy} type="submit" className="mt-5 w-full">
                     {pending ? '登录中…' : '登录'}<ArrowRight data-icon="inline-end" />
                   </Button>
                 )}</form.Subscribe>

@@ -12,5 +12,6 @@ const settings = createRoute({ getParentRoute: () => root, path: '/settings', co
 const connection = createRoute({ getParentRoute: () => root, path: '/settings/connection', component: lazyRouteComponent(() => import('@/pages/settings'), 'SettingsPage') })
 const preferences = createRoute({ getParentRoute: () => root, path: '/settings/preferences', component: lazyRouteComponent(() => import('@/pages/settings'), 'SettingsPage') })
 const appSettings = createRoute({ getParentRoute: () => root, path: '/settings/app', component: lazyRouteComponent(() => import('@/pages/settings'), 'SettingsPage') })
-export const router = createRouter({ routeTree: root.addChildren([index, accounts, detail, statistics, settings, connection, preferences, appSettings]), scrollRestoration: true, defaultPreload: false })
+const security = createRoute({ getParentRoute: () => root, path: '/settings/security', component: lazyRouteComponent(() => import('@/pages/settings'), 'SettingsPage') })
+export const router = createRouter({ routeTree: root.addChildren([index, accounts, detail, statistics, settings, connection, preferences, appSettings, security]), scrollRestoration: true, defaultPreload: false })
 declare module '@tanstack/react-router' { interface Register { router: typeof router } }

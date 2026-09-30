@@ -1,7 +1,7 @@
-import { useEffect, useState } from 'react'
-import { useQuery } from '@tanstack/react-query'
+import { useEffect, useMemo, useState } from 'react'
 import { api, queryClient } from './api'
 import { useWorkspace } from './preferences'
+import { useCompletionQuery } from './completion-query'
 import { refreshCountdown } from './refresh-countdown'
 import { dateInZone, type Account, type Sample, type SpendingRow, type TodayStats, type Usage } from '../../shared/domain'
 
@@ -33,41 +33,47 @@ export function useNow() {
 export function useDirectory() {
   const { config } = useWorkspace()
   const visible = useForeground()
-  return useQuery({ queryKey: ['accounts', config.instanceId], queryFn: ({ signal }) => api<Sample<Account[]>>('/accounts', undefined, signal), enabled: visible, staleTime: 60_000, meta: { poll: true } })
+  return useCompletionQuery<Sample<Account[]>>(['accounts', config.instanceId], 60, visible,
+    (force, signal) => api(`/accounts${force ? '?force=true' : ''}`, undefined, signal))
 }
-export function useMonitor(requestedIds?: number[], withSpending = true) {
+export function useMonitor(requestedIds?: number[], withSpending = true, scope: 'all' | 'statistics' = 'all') {
   const { config, preferences } = useWorkspace()
-  const visible = useForeground()
-  const now = useNow()
-  const ids = [...new Set(requestedIds ?? preferences.pins)].sort((a, b) => a - b)
+  const visible = useForeground(), now = useNow()
+  const [refreshing, setRefreshing] = useState(false)
+  const idsIdentity = JSON.stringify(requestedIds ?? preferences.pins)
+  const ids = useMemo(() => [...new Set(JSON.parse(idsIdentity) as number[])].sort((a, b) => a - b), [idsIdentity])
   const enabled = visible && ids.length > 0
-  const polling = (seconds: number) => ({ enabled, refetchInterval: enabled ? seconds * 1000 : false as const, refetchIntervalInBackground: false, meta: { poll: true } })
-  const status = useQuery({ queryKey: ['status', config.instanceId, ids], queryFn: ({ signal }) => api<Record<number, Sample<Account>>>('/status', { ids }, signal), ...polling(config.intervals.status) })
+  const status = useCompletionQuery<Record<number, Sample<Account>>>(['status', config.instanceId, ids], config.intervals.status, enabled,
+    (force, signal) => api('/status', { ids, force }, signal))
   const day = dateInZone(new Date(now), config.serverTimeZone)
-  const today = useQuery({ queryKey: ['today', config.instanceId, ids, day], queryFn: ({ signal }) => api<{ day: string; items: Record<number, Sample<TodayStats>> }>('/today', { ids }, signal), ...polling(config.intervals.status) })
+  const today = useCompletionQuery<{ day: string; items: Record<number, Sample<TodayStats>> }>(['today', config.instanceId, ids, day], config.intervals.status, enabled && scope === 'all',
+    (force, signal) => api('/today', { ids, force }, signal))
   const eligible = ids.filter(id => status.data?.[id]?.data?.supportsUsage)
-  const quota = useQuery({ queryKey: ['quota', config.instanceId, eligible], queryFn: ({ signal }) => api<Record<number, Sample<Usage>>>('/quota', { ids: eligible }, signal), ...polling(config.intervals.quota), enabled: enabled && eligible.length > 0 })
-  // Unknown account types stay in the requested scope; the server validates them.
-  const subscriptions = preferences.subscriptions.filter(s => ids.includes(s.accountId) && (!status.data?.[s.accountId]?.data || status.data[s.accountId].data!.type === 'oauth'))
-    .sort((a, b) => preferences.pins.indexOf(a.accountId) - preferences.pins.indexOf(b.accountId))
+  const quotaEnabled = enabled && eligible.length > 0 && scope === 'all'
+  const quota = useCompletionQuery<Record<number, Sample<Usage>>>(['quota', config.instanceId, eligible], config.intervals.quota, quotaEnabled,
+    (force, signal) => api('/quota', { ids: eligible, force }, signal))
+  const subscriptions = useMemo(() => preferences.subscriptions.filter(subscription => ids.includes(subscription.accountId) && (!status.data?.[subscription.accountId]?.data || status.data[subscription.accountId].data!.type === 'oauth'))
+    .sort((a, b) => preferences.pins.indexOf(a.accountId) - preferences.pins.indexOf(b.accountId)), [preferences.subscriptions, preferences.pins, ids, status.data])
   const spendingBody = { subscriptions, timeZone: preferences.timeZone, includeAdmin: preferences.includeAdmin }
   const localDay = dateInZone(new Date(now), preferences.timeZone)
-  const spending = useQuery({ queryKey: ['spending', config.instanceId, spendingBody, localDay], queryFn: ({ signal }) => api<{ day: string; rows: SpendingRow[] }>('/spending', spendingBody, signal), ...polling(config.intervals.spending), enabled: enabled && withSpending && subscriptions.length > 0 })
+  const spendingEnabled = enabled && withSpending && subscriptions.length > 0
+  const spending = useCompletionQuery<{ day: string; rows: SpendingRow[] }>(['spending', config.instanceId, spendingBody, localDay], config.intervals.spending, spendingEnabled,
+    (force, signal) => api('/spending', { ...spendingBody, force }, signal))
   const dailyBody = { ids, timeZone: preferences.timeZone, includeAdmin: preferences.includeAdmin }
   const dailyEnabled = enabled && withSpending && requestedIds !== undefined
-  const dailySpending = useQuery({ queryKey: ['daily-spending', config.instanceId, dailyBody, localDay], queryFn: ({ signal }) => api<{ day: string; items: Record<number, Sample<number>> }>('/spending/today', dailyBody, signal), ...polling(config.intervals.spending), enabled: dailyEnabled })
+  const dailySpending = useCompletionQuery<{ day: string; items: Record<number, Sample<number>> }>(['daily-spending', config.instanceId, dailyBody, localDay], config.intervals.spending, dailyEnabled,
+    (force, signal) => api('/spending/today', { ...dailyBody, force }, signal))
   const refresh = async () => {
-    await Promise.all([status.refetch(), today.refetch(), ...(eligible.length ? [quota.refetch()] : []), ...(subscriptions.length && withSpending ? [spending.refetch()] : []), ...(dailyEnabled ? [dailySpending.refetch()] : [])])
+    if (refreshing || !enabled) return
+    setRefreshing(true)
+    try {
+      await status.forceRefresh()
+      await Promise.all([...(scope === 'all' ? [today.forceRefresh(), quota.forceRefresh()] : []), spending.forceRefresh(), dailySpending.forceRefresh()])
+    } finally { setRefreshing(false) }
   }
-  const nextRefreshIn = refreshCountdown(now, [
-    { ...status, enabled, interval: config.intervals.status },
-    { ...today, enabled, interval: config.intervals.status },
-    { ...quota, enabled: enabled && eligible.length > 0, interval: config.intervals.quota },
-    { ...spending, enabled: enabled && withSpending && subscriptions.length > 0, interval: config.intervals.spending },
-    { ...dailySpending, enabled: dailyEnabled, interval: config.intervals.spending },
-  ])
+  const nextRefreshIn = refreshCountdown(now, [{ ...quota, enabled: quotaEnabled, interval: config.intervals.quota }])
   return { status, today: { ...today, data: today.data?.day === day ? today.data : undefined }, quota,
-    spending: { ...spending, data: spending.data?.day === localDay ? spending.data : undefined }, refresh, now, nextRefreshIn,
+    spending: { ...spending, data: spending.data?.day === localDay ? spending.data : undefined }, refresh, refreshQuota: quota.forceRefresh, refreshing, now, nextRefreshIn,
     dailySpending: { ...dailySpending, data: dailySpending.data?.day === localDay ? dailySpending.data : undefined },
     isFetching: status.isFetching || today.isFetching || quota.isFetching || spending.isFetching || dailySpending.isFetching, subscriptions }
 }

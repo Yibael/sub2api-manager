@@ -20,7 +20,7 @@ import { accountState, providerNames, type Account, type Quota } from '../../sha
 import type { MonitorData } from '@/lib/monitor'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
-  return <div className="flex items-center gap-3"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>{!compact && <span className="brand-name">sub2<span className="text-muted-foreground">manager</span></span>}</div>
+  return <div className="flex items-center gap-3"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>{!compact && <span className="brand-name">sub2api <span className="text-muted-foreground">manager</span></span>}</div>
 }
 export function Money({ value, currency = '$' }: { value: number | null | undefined; currency?: string }) {
   const { preferences } = useWorkspace()
@@ -38,7 +38,7 @@ export function ErrorNotice({ message }: { message: string | null | undefined })
 export function PageHeading({ title, action }: { title: string; action?: ReactNode }) {
   return <div className="page-heading"><h1>{title}</h1>{action}</div>
 }
-export function RefreshButton({ busy, onClick, countdown }: { busy: boolean; onClick: () => void; countdown?: number | null }) {
+export function RefreshButton({ busy, onClick, countdown, label = '立即刷新' }: { busy: boolean; onClick: () => void; countdown?: number | null; label?: string }) {
   const [finishing, setFinishing] = useState(busy)
   if (busy && !finishing) setFinishing(true)
   useEffect(() => {
@@ -47,7 +47,7 @@ export function RefreshButton({ busy, onClick, countdown }: { busy: boolean; onC
     return () => window.clearTimeout(timer)
   }, [busy, finishing])
   const loading = busy || finishing
-  return <Button className="refresh-button" variant="outline" onClick={onClick} disabled={loading} aria-busy={loading} aria-label={loading ? '正在刷新' : '立即刷新'}>
+  return <Button className="refresh-button" variant="outline" onClick={onClick} disabled={loading} aria-busy={loading} aria-label={loading ? '正在刷新' : label}>
     <span className="refresh-icon" aria-hidden="true">{loading ? <Spinner /> : <RefreshCw className="size-4" />}</span>
     <span className="refresh-label">{loading ? '刷新中' : countdown == null ? '刷新' : `${countdown}s`}</span>
   </Button>
@@ -58,18 +58,27 @@ export function NoPins() {
 export function Metric({ label, value, icon, loading = false }: { label: string; value: ReactNode; icon: ReactNode; loading?: boolean }) {
   return <Card className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent>{loading ? <Skeleton className="h-10 w-28" /> : <div className="metric-value">{value}</div>}</CardContent></Card>
 }
-export function QuotaRow({ quota, now }: { quota: Quota; now: number }) {
+export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: number; estimatedCost?: number | null }) {
   const remaining = quota.resetsAt ? Math.ceil((Date.parse(quota.resetsAt) - now) / 60000) : null
   const reset = remaining === null ? null : remaining <= 0 ? '等待额度更新' : remaining >= 1440 ? `${Math.floor(remaining / 1440)} 天后重置` : remaining >= 60 ? `${Math.floor(remaining / 60)} 小时 ${remaining % 60} 分后重置` : `${remaining} 分钟后重置`
-  return <div className={cn('quota-row', quota.percent !== null && quota.percent >= 90 && 'quota-warning')}><div className="flex items-center justify-between gap-3"><span>{quota.name}</span><span className="quota-number">{quota.percent === null ? '未知' : `${quota.percent.toFixed(0)}%`}</span></div><Progress value={quota.percent === null ? 0 : Math.min(100, quota.percent)} aria-label={`${quota.name}已用`} />{(reset || quota.limit !== null) && <div className="quota-footnote">{reset && <span>{reset}</span>}{quota.limit !== null && <span><Money value={quota.used} /> / <Money value={quota.limit} /></span>}</div>}</div>
+  return <div className={cn('quota-row', quota.percent !== null && quota.percent >= 90 && 'quota-warning')}>
+    <div className="flex items-center justify-between gap-3"><span>{quota.name}</span><span className="quota-number">{quota.percent === null ? '未知' : `${quota.percent.toFixed(0)}%`}</span></div>
+    <Progress value={quota.percent === null ? 0 : Math.min(100, quota.percent)} aria-label={`${quota.name}已用`} />
+    {(reset || quota.limit !== null || estimatedCost !== undefined) && <div className="quota-footnote">
+      {reset && <span>{reset}</span>}
+      {quota.limit !== null && <span><Money value={quota.used} /> / <Money value={quota.limit} /></span>}
+      {estimatedCost !== undefined && <span className="quota-estimate">估算额度 <Money value={estimatedCost} /></span>}
+    </div>}
+  </div>
 }
 export function AccountCard({ id, monitor }: { id: number; monitor: MonitorData }) {
   const sample = monitor.status.data?.[id], account = sample?.data
   if (!account) return <Card><CardHeader><CardTitle>账号 #{id}</CardTitle><CardDescription>{sample?.error ?? '正在读取账号状态'}</CardDescription></CardHeader><CardContent>{sample?.error || monitor.status.error ? <p className="text-sm text-muted-foreground">账号暂不可用</p> : <Skeleton className="h-24 w-full" />}</CardContent><CardFooter><Button variant="ghost" asChild><Link to="/accounts">管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></CardFooter></Card>
   const usage = monitor.quota.data?.[id], today = monitor.today.data?.items[id]
   const quotas = account.supportsUsage ? usage?.data?.windows ?? [] : account.localQuotas
+  const weeklyEstimate = account.platform === 'openai' && account.type === 'oauth' ? usage?.data?.estimatedWeeklyCost ?? null : undefined
   const state = accountState(account, monitor.now)
   const errors = [sample.error, today?.error, usage?.error].filter(Boolean)
-  return <Card className={cn('account-card', sample.error && 'account-stale')}><CardHeader><div className="flex min-w-0 items-center gap-3"><ProviderMark platform={account.platform} /><div className="min-w-0"><CardTitle><Link className="account-name" to="/accounts/$id" params={{ id: String(id) }}>{account.name}</Link></CardTitle><CardDescription>{providerNames[account.platform] ?? account.platform} <span className="mx-1">·</span> {account.type === 'oauth' ? 'OAuth' : account.type === 'setup-token' ? 'Setup Token' : 'API Key'}</CardDescription></div></div><CardAction><Badge variant="outline" className={cn('state-badge', state === '可调度' && !sample.error && 'state-ok')}><span className="status-dot" />{sample.error ? '更新失败' : state}</Badge></CardAction></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><Money value={today?.data?.standardCost} /></div></div><div><p className="number-label">当前并发</p><div className="concurrency">{account.currentConcurrency ?? '—'}<span> / {account.concurrency ?? '—'}</span></div></div></div><div className="flex min-h-20 flex-col gap-4">{quotas.length ? quotas.slice(0, 2).map(q => <QuotaRow key={q.name} quota={q} now={monitor.now} />) : <p className="quota-empty">{account.supportsUsage ? usage?.error ?? (usage ? '暂未返回额度窗口' : '正在读取额度…') : '未配置额度'}</p>}</div>{account.platform === 'openai' && account.type === 'oauth' && <div className="flex items-center justify-between gap-3 text-xs"><span className="text-muted-foreground">7日额度估算</span><Money value={usage?.data?.estimatedWeeklyCost} /></div>}{errors.length > 0 && <p role="status" className="field-warning">{errors.join('；')}。{sample.updatedAt ? `最近成功：${new Date(sample.updatedAt).toLocaleTimeString('zh-CN')}` : ''}</p>}</CardContent></Card>
+  return <Card className={cn('account-card', sample.error && 'account-stale')}><CardHeader><Link className="account-link flex min-w-0 items-center gap-3" to="/accounts/$id" params={{ id: String(id) }}><ProviderMark platform={account.platform} /><div className="min-w-0"><CardTitle><span className="account-name">{account.name}</span></CardTitle><CardDescription>{providerNames[account.platform] ?? account.platform} <span className="mx-1">·</span> {account.type === 'oauth' ? 'OAuth' : account.type === 'setup-token' ? 'Setup Token' : 'API Key'}</CardDescription></div></Link><CardAction><Badge variant="outline" className={cn('state-badge', state === '可调度' && !sample.error && 'state-ok')}><span className="status-dot" />{sample.error ? '更新失败' : state}</Badge></CardAction></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><Money value={today?.data?.standardCost} /></div></div><div><p className="number-label">当前并发</p><div className="concurrency">{account.currentConcurrency ?? '—'}<span> / {account.concurrency ?? '—'}</span></div></div></div><div className="flex min-h-20 flex-col gap-4">{quotas.length ? quotas.slice(0, 2).map(q => <QuotaRow key={q.name} quota={q} now={monitor.now} estimatedCost={q.name === '7日额度' ? weeklyEstimate : undefined} />) : <p className="quota-empty">{account.supportsUsage ? usage?.error ?? (usage ? '暂未返回额度窗口' : '正在读取额度…') : '未配置额度'}</p>}</div>{errors.length > 0 && <p role="status" className="field-warning">{errors.join('；')}。{sample.updatedAt ? `最近成功：${new Date(sample.updatedAt).toLocaleTimeString('zh-CN')}` : ''}</p>}</CardContent></Card>
 }
 export function accountLabel(account: Account) { return `${providerNames[account.platform] ?? account.platform} · ${account.type === 'oauth' ? 'OAuth' : 'API Key'}` }
