@@ -27,6 +27,10 @@ build/
 .env
 .env.*
 !.env.example
+/docker-compose.yaml
+/docker-compose.yml
+/compose.yaml
+/compose.yml
 .data/
 coverage/
 *.tsbuildinfo

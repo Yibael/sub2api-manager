@@ -6,7 +6,8 @@
 | --- | --- |
 | `Dockerfile` | 多阶段构建前端与服务端，最终镜像只包含 Bun 和应用产物 |
 | `.dockerignore` | 排除环境文件、本地数据、Git、依赖目录及旧构建产物 |
-| `compose.yaml` | 单实例应用、持久化卷、回环端口及运行配置 |
+| `docker-compose.example.yaml` | Compose 部署模板，包含单实例应用、持久化卷、回环端口及运行配置 |
+| `docker-compose.yaml` | 从模板复制的实际部署配置，已被 Git 忽略 |
 | `.env.example` | 本地开发与容器部署共用的环境变量模板 |
 | `scripts/healthcheck.ts` | 检查容器内应用响应及配置是否已加载，不请求 sub2api |
 
@@ -19,9 +20,12 @@
 ```sh
 cp .env.example .env
 chmod 600 .env
+cp docker-compose.example.yaml docker-compose.yaml
 ```
 
 已有 `.env` 时直接编辑，不要重新复制覆盖。本地开发和 Docker 共用这一份文件；Compose 自动读取项目根目录的 `.env`。
+
+Compose 使用 `docker-compose.yaml`，可按部署环境修改；已有文件时不要覆盖。仓库只跟踪 `docker-compose.example.yaml` 模板，本地 Compose 配置不会提交到 Git，也不会进入镜像构建上下文。从旧版本迁移时，将原有 `compose.yaml` 重命名为 `docker-compose.yaml`，保留自定义配置。
 
 本地开发可仅在启动时覆盖访问地址：
 
@@ -84,6 +88,8 @@ manager.example.com {
 ## 更新与排查
 
 更新代码后重新构建并启动：
+
+如 `docker-compose.example.yaml` 有变更，先按需合并到本地 `docker-compose.yaml`，保留部署环境的自定义配置。
 
 ```sh
 docker compose up -d --build --wait --wait-timeout 120

@@ -60,10 +60,13 @@ APP_ORIGIN=https://manager.example.com bun run start
 ```sh
 cp .env.example .env
 chmod 600 .env
+cp docker-compose.example.yaml docker-compose.yaml
 # 编辑 .env，填写真实连接、访问密码和 HTTPS 来源
 docker compose config --quiet
 docker compose up -d --build --wait --wait-timeout 120
 ```
+
+`docker-compose.example.yaml` 为部署模板；实际使用的 `docker-compose.yaml` 已被 Git 忽略，可按部署环境修改。已有配置文件时不要覆盖，更新时按需合并模板变更。
 
 镜像采用多阶段构建，服务端打包后无需运行时 `node_modules`；容器使用非 root 用户和只读根文件系统。共享刷新设置保存到 `/app/data` 命名卷。宿主端口默认只绑定 `127.0.0.1:3001`，通过现有 HTTPS 反向代理对外提供访问。
 
