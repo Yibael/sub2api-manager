@@ -35,6 +35,7 @@ describe('application boundary', () => {
     expect((await config.json()).authenticated).toBe(false)
     expect((await request('/accounts')).status).toBe(401)
     expect((await request('/spending/today', { ids: [1], timeZone: 'UTC', includeAdmin: false })).status).toBe(401)
+    expect((await request('/spending/rankings', { range: 'today', timeZone: 'UTC', includeAdmin: false })).status).toBe(401)
     expect(upstream.request).not.toHaveBeenCalled()
   })
   it('issues a secure session and never exposes the upstream credentials', async () => {
@@ -68,6 +69,23 @@ describe('application boundary', () => {
     const response = await request('/spending/today', { ids: [4], timeZone: 'UTC', includeAdmin: false }, session)
     expect(response.status).toBe(200)
     expect((await response.json()).items[4].data).toBe(12.3)
+  })
+  it('protects and validates site-wide user rankings without requiring pinned accounts', async () => {
+    const { request, upstream } = setup()
+    const login = await request('/login', { password: 'test-password-long-enough' })
+    const session = { cookie: login.headers.get('set-cookie')!.split(';')[0], pageToken: (await login.json()).pageToken }
+    expect((await request('/spending/rankings', { range: 'today', timeZone: 'invalid', includeAdmin: false }, session)).status).toBe(422)
+    expect((await request('/spending/rankings', { range: 'year', timeZone: 'UTC', includeAdmin: false }, session)).status).toBe(422)
+    const response = await request('/spending/rankings', { range: 'today', timeZone: 'Asia/Shanghai', includeAdmin: false }, session)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const result = await response.json()
+    expect(result.data.rows[0].userId).toBe(11)
+    expect(result.data.range).toBe('today')
+    expect(result.data.rows.some((row: { userId: number }) => row.userId === 7)).toBe(false)
+    expect(upstream.request.mock.calls.every(([path]) => ['users', 'dashboard/users-ranking'].includes(path))).toBe(true)
+    const hourly = await (await request('/spending/rankings', { range: 'hour', timeZone: 'Asia/Shanghai', includeAdmin: false }, session)).json()
+    expect(hourly.data.rows[0].userId).toBe(12)
   })
   it('shares automatic cache intervals across distinct authenticated sessions', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00Z'))

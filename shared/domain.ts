@@ -23,6 +23,16 @@ export const dailySpendingRequestSchema = z.object({
   timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
 })
 export type DailySpendingRequest = z.infer<typeof dailySpendingRequestSchema>
+export const rankingRangeSchema = z.enum(['hour', 'today', '7d', '30d'])
+export type RankingRange = z.infer<typeof rankingRangeSchema>
+export const userRankingsRequestSchema = z.object({
+  range: rankingRangeSchema, timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
+})
+export type UserRankingsRequest = z.infer<typeof userRankingsRequestSchema>
+export interface UserSpendingRank { userId: number; name: string; amount: number; requests: number; tokens: number }
+export interface RankingPeriod { period: string; startDate: string; endDate: string; timeZone: string }
+export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[] }
+export function rankingInterval(intervals: Intervals) { return Math.max(30, intervals.spending) }
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
 export interface Quota { name: string; percent: number | null; used: number | null; limit: number | null; resetsAt: string | null }
 export interface Account {
@@ -42,6 +52,20 @@ export function dateInZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)
   const get = (type: string) => parts.find(p => p.type === type)!.value
   return `${get('year')}-${get('month')}-${get('day')}`
+}
+export function hourInZone(date: Date, timeZone: string): string {
+  const hour = new Intl.DateTimeFormat('en-US', { timeZone, hour: '2-digit', hourCycle: 'h23' }).format(date)
+  return `${dateInZone(date, timeZone)} ${hour}:00`
+}
+export function userRankingPeriod(range: RankingRange, now: Date, timeZone: string, serverTimeZone: string): RankingPeriod {
+  if (range === 'hour') {
+    const period = hourInZone(now, serverTimeZone), day = period.slice(0, 10)
+    return { period, startDate: day, endDate: day, timeZone: serverTimeZone }
+  }
+  const endDate = dateInZone(now, timeZone), start = new Date(`${endDate}T00:00:00Z`)
+  start.setUTCDate(start.getUTCDate() - (range === '7d' ? 6 : range === '30d' ? 29 : 0))
+  const startDate = start.toISOString().slice(0, 10)
+  return { period: range === 'today' ? endDate : `${startDate}/${endDate}`, startDate, endDate, timeZone }
 }
 export function subscriptionCycle(today: string, renewalDay: number): Cycle {
   const [year, month] = today.split('-').map(Number)

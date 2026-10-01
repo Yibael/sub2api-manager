@@ -11,7 +11,7 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Badge } from '@/components/ui/badge'
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
-import { Skeleton } from '@/components/ui/skeleton'
+import { DirectorySkeleton, LoadingValue, StableRegion } from '@/components/loading'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import type { Account } from '../../shared/domain'
 
@@ -32,12 +32,13 @@ export function AccountsPage() {
     update({ pins })
   }
   const missing = preferences.pins.filter(id => directory.data?.data && !accounts.some(a => a.id === id))
+  const pending = !directory.data?.data && !directory.error && !directory.data?.error
   return <div className="page-stack"><PageHeading title="账号管理" action={<RefreshButton busy={directory.isFetching} onClick={() => void directory.forceRefresh()} />} /><ErrorNotice message={directory.error?.message ?? directory.data?.error} />
     <div className="account-toolbar"><div className="search-box"><Search className="size-4" /><Input aria-label="搜索账号" placeholder="搜索名称、平台或账号 ID…" value={search} onChange={e => setSearch(e.target.value)} /></div><ToggleGroup type="single" value={filter} onValueChange={value => { if (value) setFilter(value) }} variant="outline"><ToggleGroupItem value="all">全部</ToggleGroupItem><ToggleGroupItem value="pinned">已关注</ToggleGroupItem><ToggleGroupItem value="oauth">OAuth</ToggleGroupItem></ToggleGroup></div>
-    <Card><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />账号目录</span></CardTitle><CardDescription>{accounts.length} 个账号 · {preferences.pins.length} 个已关注</CardDescription></CardHeader><CardContent className="account-list">{directory.isLoading ? [1, 2, 3].map(id => <Skeleton key={id} className="m-4 h-20" />) : filtered.length ? filtered.map(account => {
+    <Card><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />账号目录</span></CardTitle><CardDescription><LoadingValue loading={pending}>{accounts.length}</LoadingValue> 个账号 · {preferences.pins.length} 个已关注</CardDescription></CardHeader><CardContent className="account-list"><StableRegion phase={pending ? 'pending' : 'ready'} busy={directory.isFetching}>{pending ? <DirectorySkeleton rows={Math.min(6, Math.max(4, preferences.pins.length))} /> : filtered.length ? filtered.map(account => {
       const pinned = preferences.pins.includes(account.id), subscription = preferences.subscriptions.find(s => s.accountId === account.id)
       return <div key={account.id} className="directory-row"><ProviderMark platform={account.platform} /><div className="directory-info"><Link to="/accounts/$id" params={{ id: String(account.id) }} className="account-name">{account.name}</Link><p>{accountLabel(account)} <span>· #{account.id}</span></p>{subscription && <span className="subscription-summary"><Money value={subscription.price} currency={preferences.costCurrency} /> / 周期 · 每月 {subscription.renewalDay} 日续费</span>}</div><div className="directory-actions">{pinned && <div className="flex items-center"><Button variant="ghost" size="icon" aria-label={`上移 ${account.name}`} disabled={preferences.pins.indexOf(account.id) === 0} onClick={() => move(account.id, -1)}><ArrowUp /></Button><Button variant="ghost" size="icon" aria-label={`下移 ${account.name}`} disabled={preferences.pins.indexOf(account.id) === preferences.pins.length - 1} onClick={() => move(account.id, 1)}><ArrowDown /></Button></div>}{account.type === 'oauth' && <Button variant="ghost" size="icon" aria-label={`编辑 ${account.name} 订阅`} onClick={() => setEditing(account)}><CreditCard /></Button>}<Button variant={pinned ? 'secondary' : 'outline'} aria-label={`${pinned ? '取消关注' : '关注'} ${account.name}`} onClick={() => togglePin(account.id)}>{pinned ? <PinOff data-icon="inline-start" /> : <Pin data-icon="inline-start" />}<span>{pinned ? '已关注' : '关注'}</span></Button><Button variant="ghost" size="icon" asChild><Link aria-label={`查看 ${account.name}`} to="/accounts/$id" params={{ id: String(account.id) }}><ArrowUpRight /></Link></Button></div></div>
-    }) : <Empty><EmptyHeader><EmptyTitle>{search || filter !== 'all' ? '没有匹配的账号' : '暂无账号'}</EmptyTitle></EmptyHeader></Empty>}</CardContent></Card>
+    }) : <Empty><EmptyHeader><EmptyTitle>{search || filter !== 'all' ? '没有匹配的账号' : '暂无账号'}</EmptyTitle></EmptyHeader></Empty>}</StableRegion></CardContent></Card>
     {missing.length > 0 && <Card><CardHeader><CardTitle>不可用的关注账号</CardTitle></CardHeader><CardContent>{missing.map(id => <div className="settings-row" key={id}><Badge variant="outline">账号 #{id}</Badge><Button variant="outline" onClick={() => togglePin(id)}>取消关注</Button></div>)}</CardContent></Card>}
     {editing && <SubscriptionEditor key={editing.id} account={editing} onClose={() => setEditing(null)} />}</div>
 }

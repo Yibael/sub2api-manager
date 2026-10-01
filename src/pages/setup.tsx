@@ -10,6 +10,7 @@ import { loginWithPassword } from '@/lib/api'
 import { pageSession } from '@/lib/page-session'
 import { AutomaticPasskeyPrompt } from '@/lib/automatic-passkey'
 import { Brand, ErrorNotice } from '@/components/common'
+import { StableRegion } from '@/components/loading'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
@@ -44,7 +45,7 @@ export function SetupPage({ config }: { config: PublicConfig }) {
       <div className="setup-panel">
         <Brand />
         <PwaUpdate />
-        <Card>
+        <StableRegion><Card>
           <CardHeader><CardTitle>{config.configured ? '登录' : '连接设置'}</CardTitle></CardHeader>
           <CardContent>
             {config.configured ? (
@@ -73,7 +74,7 @@ export function SetupPage({ config }: { config: PublicConfig }) {
               </div>
             )}
           </CardContent>
-        </Card>
+        </Card></StableRegion>
       </div>
     </main>
   )

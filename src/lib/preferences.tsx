@@ -14,7 +14,7 @@ export { preferencesSchema }
 export type { Preferences }
 type Change = Partial<Preferences> & { intervals?: WorkspacePreferences['intervals'] }
 const Context = createContext<{ preferences: Preferences; config: PublicConfig; update: (change: Change, revision?: number) => Promise<boolean>; revision: number; getRevision: () => number; getPreferences: () => WorkspacePreferences; isSaving: boolean; legacy: Preferences | null; migrationPending: boolean } | null>(null)
-export function PreferencesProvider({ config, children }: { config: PublicConfig; children: ReactNode }) {
+export function PreferencesProvider({ config, children, fallback }: { config: PublicConfig; children: ReactNode; fallback?: (error: string | undefined, retry: () => void) => ReactNode }) {
   const localKey = `sub2api-manager:ui:${config.instanceId}`
   const [bootstrap] = useState(() => {
     let legacy: Preferences | null = null
@@ -78,7 +78,7 @@ export function PreferencesProvider({ config, children }: { config: PublicConfig
       return false
     } finally { setSaving(value => value - 1) }
   }
-  if (!workspace.data) return <main className="loading-screen">{workspace.error ? <Alert variant="destructive"><AlertTitle>无法读取配置</AlertTitle><AlertDescription>{workspace.error.message}<Button variant="outline" onClick={() => void refetch()}>重试</Button></AlertDescription></Alert> : <Skeleton className="h-40 w-full max-w-sm" />}</main>
+  if (!workspace.data) return <ThemeProvider attribute="class" forcedTheme={local.theme === 'system' ? undefined : local.theme} defaultTheme="system" enableSystem>{fallback ? fallback(workspace.error?.message, () => { void refetch() }) : <main className="loading-screen">{workspace.error ? <Alert variant="destructive"><AlertTitle>无法读取配置</AlertTitle><AlertDescription>{workspace.error.message}<Button variant="outline" onClick={() => void refetch()}>重试</Button></AlertDescription></Alert> : <Skeleton className="h-40 w-full max-w-sm" />}</main>}</ThemeProvider>
   const preferences: Preferences = { ...workspace.data.preferences, ...local }
   const sharedConfig = { ...config, intervals: workspace.data.preferences.intervals }
   return <Context.Provider value={{ preferences, config: sharedConfig, update, revision: workspace.data.revision, getRevision: () => current()?.revision ?? workspace.data!.revision, getPreferences: () => current()?.preferences ?? workspace.data!.preferences, isSaving: saving > 0, legacy: bootstrap.legacy, migrationPending: !workspace.data.initialized && !!bootstrap.legacy }}><ThemeProvider attribute="class" forcedTheme={local.theme === 'system' ? undefined : local.theme} defaultTheme="system" enableSystem>{children}</ThemeProvider></Context.Provider>

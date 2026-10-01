@@ -1,8 +1,9 @@
 import Decimal from 'decimal.js'
-import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage } from '../shared/domain'
+import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage, type UserRankingsRequest } from '../shared/domain'
 import { DemandCache } from './cache'
 import { normalizeAccount, normalizeToday, normalizeUsage, object } from './normalize'
 import { UpstreamError, type Upstream } from './upstream'
+import { Rankings } from './rankings'
 
 interface SpendingScope { force: boolean; costs: Map<string, Promise<Sample<string>>>; admins?: Promise<Sample<number[]>> }
 
@@ -15,7 +16,15 @@ export class Monitor {
   private spendingCache = new DemandCache<{ amount: number; updatedAt: number }>()
   private adminCache = new DemandCache<number[]>()
   private batchUsageSupported = true
-  constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {}
+  private userRankings: Rankings
+  constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {
+    this.userRankings = new Rankings(upstream, () => this.intervals, serverTimeZone, (signal, force) => this.admins(signal, force))
+  }
+
+  private admins(signal: AbortSignal, force = false) {
+    return this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number), force)
+  }
+  rankings(input: UserRankingsRequest) { return this.userRankings.read(input) }
 
   private async directory(path: 'accounts' | 'users', signal: AbortSignal): Promise<unknown[]> {
     const values: unknown[] = [], seen = new Set<number>()
@@ -101,7 +110,7 @@ export class Monitor {
       let admins: number[] = []
       const timestamps: number[] = []
       if (!includeAdmin) {
-        const sample = await (scope.admins ??= this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number), scope.force))
+        const sample = await (scope.admins ??= this.admins(signal, scope.force))
         if (sample.error || !sample.data) throw new Error('Admin 名单读取失败，未生成排除 Admin 的统计')
         admins = sample.data
         timestamps.push(sample.updatedAt!)

@@ -1,4 +1,5 @@
 import type { Upstream } from '../../server/upstream'
+import { hourInZone } from '../../shared/domain'
 
 export const fixtureAccounts = [
   { id: 1, name: '主力账号', platform: 'openai', type: 'oauth', status: 'active', schedulable: true, concurrency: 8, current_concurrency: 3 },
@@ -12,6 +13,29 @@ export const fixtureUpstream: Upstream = {
   async request(path, options = {}) {
     if (path === 'accounts') return { total: fixtureAccounts.length, items: fixtureAccounts }
     if (path === 'users') return { total: 1, items: [{ id: 7, role: 'admin' }] }
+    if (path === 'dashboard/users-ranking') {
+      const days = (Date.parse(options.query!.end_date) - Date.parse(options.query!.start_date)) / 86_400_000 + 1
+      return {
+        start_date: options.query!.start_date, end_date: options.query!.end_date,
+        ranking: [
+          { user_id: 7, email: 'admin@example.test', actual_cost: 24.6, requests: 120, tokens: 1_800_000 },
+          { user_id: 11, email: 'developer@example.test', actual_cost: 12.84, requests: 86, tokens: 1_200_000 },
+          { user_id: 12, email: 'design@example.test', actual_cost: 8.26, requests: 54, tokens: 640_000 },
+          { user_id: 13, email: 'research@example.test', actual_cost: 3.18, requests: 23, tokens: 420_000 },
+          { user_id: 14, email: 'automation@example.test', actual_cost: 1.32, requests: 18, tokens: 240_000 },
+        ].map(row => ({ ...row, actual_cost: row.actual_cost * days, requests: row.requests * days, tokens: row.tokens * days })),
+        total_actual_cost: 50.2 * days, total_requests: 301 * days, total_tokens: 4_300_000 * days,
+      }
+    }
+    if (path === 'dashboard/users-trend') return {
+      start_date: options.query!.start_date, end_date: options.query!.end_date, granularity: options.query!.granularity,
+      trend: [
+        { user_id: 7, email: 'admin@example.test', actual_cost: 1.48, requests: 14, tokens: 180_000 },
+        { user_id: 12, username: '产品设计', actual_cost: 0.86, requests: 12, tokens: 64_000 },
+        { user_id: 11, username: '日常开发', actual_cost: 0.42, requests: 8, tokens: 120_000 },
+        { user_id: 13, username: '研究任务', actual_cost: 0.18, requests: 3, tokens: 42_000 },
+      ].map(row => ({ ...row, date: options.query!.granularity === 'hour' ? hourInZone(new Date(), options.query!.timezone) : options.query!.start_date })),
+    }
     const match = /^accounts\/(\d+)$/.exec(path)
     if (match) return fixtureAccounts.find(a => a.id === Number(match[1]))
     const ids = (options.body as { account_ids?: number[] } | undefined)?.account_ids ?? []

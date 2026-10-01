@@ -9,7 +9,7 @@ interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Prom
 export function PwaUpdate() {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegisterError: () => toast.error('离线功能暂不可用') })
   if (!needRefresh) return null
-  return <Alert className="mb-5"><AlertTitle>有新版本可用</AlertTitle><AlertDescription><Button variant="outline" onClick={() => void updateServiceWorker(true)}>更新并重载</Button></AlertDescription></Alert>
+  return <div className="pwa-update content-enter"><Alert><AlertTitle>有新版本可用</AlertTitle><AlertDescription><Button variant="outline" onClick={() => void updateServiceWorker(true)}>更新并重载</Button></AlertDescription></Alert></div>
 }
 export function InstallHelp() {
   const [install, setInstall] = useState<InstallEvent | null>(null)

@@ -2,7 +2,7 @@ import { Elysia } from 'elysia'
 import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypto'
 import { z } from 'zod'
 import type { RegistrationResponseJSON, AuthenticationResponseJSON } from '@simplewebauthn/server'
-import { intervalsSchema, spendingRequestSchema, dailySpendingRequestSchema, type PublicConfig } from '../shared/domain'
+import { intervalsSchema, spendingRequestSchema, dailySpendingRequestSchema, userRankingsRequestSchema, type PublicConfig } from '../shared/domain'
 import { workspacePreferencesSchema } from '../shared/preferences'
 import type { Monitor } from './monitor'
 import { WorkspaceStore, WorkspaceConflict } from './workspace'
@@ -133,6 +133,7 @@ export function createApp(options: AppOptions) {
     .post('/quota', ({ body }) => options.monitor!.quota(body.ids, body.force), { body: idsSchema, beforeHandle: requireMonitor })
     .post('/spending', ({ body }) => options.monitor!.spending(body), { body: spendingRequestSchema, beforeHandle: requireMonitor })
     .post('/spending/today', ({ body }) => options.monitor!.dailySpending(body), { body: dailySpendingRequestSchema, beforeHandle: requireMonitor })
+    .post('/spending/rankings', ({ body }) => options.monitor!.rankings(body), { body: userRankingsRequestSchema, beforeHandle: requireMonitor })
     .put('/intervals', async ({ body }) => {
       await options.saveIntervals(body)
       const value = await store.update(store.snapshot().revision, { intervals: body })
