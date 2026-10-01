@@ -92,6 +92,8 @@ Passkey 使用同一个 HTTPS 入口和 `APP_ORIGIN`，无需额外端口或代�
 
 此次页面锁定认证为不兼容更新。部署后需要加载新前端并重新登录；已有 PWA 更新并重载，仍停留在旧版时关闭该站点所有页面和 PWA 后重新打开。共享业务配置与已有 Passkey 公钥继续使用原数据卷。
 
+如果仍看到旧版名称，先用无痕窗口确认新页面能否登录。iPhone 上可在“设置 → App → Safari 浏览器 → 高级 → 网站数据”删除对应站点条目；主屏幕 PWA 的 Cookie 和存储与 Safari 独立，仍停留旧版时删除该主屏幕 App，再从已加载新版的 Safari 页面通过分享菜单重新添加。网站数据或 App 删除会清除本机缓存、登录状态和本地设置，先导出尚未迁移的旧配置；已保存到服务器的共享配置不受影响。不要为了更新应用删除服务器数据卷。参考 [Apple 的清理步骤](https://support.apple.com/zh-cn/105082) 和 [主屏幕 Web App 存储说明](https://developer.apple.com/videos/play/wwdc2023/10120/)。
+
 本次 Passkey 与服务端配置同步无需修改 Dockerfile、Compose 网络或 Caddy 反代，也无需新增环境变量。已有外部 `proxy` 网络的部署保留共享网络及应用的服务别名，继续代理到容器的 `3001` 端口。确认 `APP_ORIGIN` 等于浏览器实际使用的 HTTPS 来源，并沿用原项目名和 `/app/data` 数据卷；镜像重建会按 `bun.lock` 安装新增依赖。
 
 更新代码后重新构建并启动：

@@ -20,9 +20,11 @@ export function Root() {
   const config = useQuery({ queryKey: ['config'], queryFn: ({ signal }) => api<PublicConfig>('/config', undefined, signal), staleTime: 60_000 })
   useSyncExternalStore(pageSession.subscribe, pageSession.getSnapshot, pageSession.getSnapshot)
   useEffect(() => bindPageLifecycle(pageSession, document, window, () => flushSync(() => lockSession()), () => flushSync(() => pageSession.suspend())), [])
-  if (pageSession.suspended) return <main className="loading-screen"><Brand /><Skeleton className="h-40 w-full max-w-sm" /></main>
   if (!config.data) return <main className="loading-screen"><Brand />{config.error ? <><ErrorNotice message={config.error.message} /><Button onClick={() => void config.refetch()}>重试连接</Button></> : <Skeleton className="h-40 w-full max-w-sm" />}</main>
-  if (!config.data.configured || !config.data.authenticated || !pageSession.unlocked) return <SetupPage config={config.data} />
+  // Keep the login form mounted while its system credential sheet is open so
+  // cancellation retains the automatic-prompt guard and the password fallback.
+  if (!config.data.configured || !config.data.authenticated || !pageSession.token) return <SetupPage config={config.data} />
+  if (pageSession.suspended) return <main className="loading-screen"><Brand /><Skeleton className="h-40 w-full max-w-sm" /></main>
   return <PreferencesProvider key={config.data.instanceId} config={config.data}><Shell /><Toaster position="top-center" richColors /></PreferencesProvider>
 }
 function Shell() {

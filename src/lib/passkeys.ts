@@ -8,6 +8,8 @@ export async function signInWithPasskey() {
   let verified = false
   try {
     const optionsJSON = await api<PublicKeyCredentialRequestOptionsJSON>('/passkeys/login/options', {})
+    pageSession.assertCurrent(flow.epoch)
+    if (document.visibilityState !== 'visible') throw new DOMException('页面已锁定，请重新验证', 'AbortError')
     const response = await startAuthentication({ optionsJSON })
     pageSession.assertCurrent(flow.epoch)
     acceptLogin(await api<LoginResponse>('/passkeys/login/verify', response), flow.epoch)
