@@ -31,7 +31,7 @@ export const userRankingsRequestSchema = z.object({
 export type UserRankingsRequest = z.infer<typeof userRankingsRequestSchema>
 export interface UserSpendingRank { userId: number; name: string; amount: number; requests: number; tokens: number }
 export interface RankingPeriod { period: string; startDate: string; endDate: string; timeZone: string }
-export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[] }
+export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[]; totalAmount: number }
 export function rankingInterval(intervals: Intervals) { return Math.max(30, intervals.spending) }
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
 export interface Quota { name: string; percent: number | null; used: number | null; limit: number | null; resetsAt: string | null }

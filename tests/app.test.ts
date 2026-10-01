@@ -80,6 +80,7 @@ describe('application boundary', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     const result = await response.json()
+    expect(result.data.totalAmount).toBe(25.6)
     expect(result.data.rows[0].userId).toBe(11)
     expect(result.data.range).toBe('today')
     expect(result.data.rows.some((row: { userId: number }) => row.userId === 7)).toBe(false)

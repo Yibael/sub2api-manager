@@ -21,7 +21,13 @@ export function UserRankingCard({ title, description, sample, error, loading, cu
   if (ranking && placeholderRows !== Math.max(3, ranking.rows.length)) setPlaceholderRows(Math.max(3, ranking.rows.length))
   return <Card className="min-w-0" aria-busy={loading}>
     <CardHeader className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
-      <div className="flex min-w-0 flex-col gap-1"><CardTitle>{title}</CardTitle><CardDescription className="min-h-5">{description}</CardDescription></div>
+      <div className="flex w-full min-w-0 flex-col gap-1 sm:w-auto">
+        <div className="flex min-h-6 items-baseline justify-between gap-4 sm:justify-start">
+          <CardTitle className="shrink-0">{title}</CardTitle>
+          <dl className="flex min-w-0 flex-wrap items-baseline justify-end gap-x-2 gap-y-1"><dt className="text-xs text-muted-foreground">总消费</dt><dd className="min-w-0 text-right text-base font-medium wrap-anywhere"><Money value={ranking?.totalAmount} currency={currency} loading={pending} /></dd></dl>
+        </div>
+        <CardDescription className="min-h-5">{description}</CardDescription>
+      </div>
       <ToggleGroup type="single" variant="segmented" spacing={1} size="sm" value={range} aria-label="消费榜时间范围" className="w-full shrink-0 sm:w-fit" onValueChange={value => { const selected = ranges.find(range => range.value === value); if (selected) onRangeChange(selected.value) }}>
         {ranges.map(option => <ToggleGroupItem key={option.value} value={option.value} className="flex-1 sm:flex-none">{option.label}</ToggleGroupItem>)}
       </ToggleGroup>

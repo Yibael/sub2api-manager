@@ -22,11 +22,13 @@ describe('selectable upstream user consumption rankings', () => {
     const result = await monitor.rankings(input)
     expect(result.data?.rows.map(row => [row.userId, row.amount])).toEqual([[11, 12.84], [12, 8.26], [13, 3.18], [14, 1.32]])
     expect(result.data).toMatchObject({ range: 'today', period: '2026-10-01', startDate: '2026-10-01', endDate: '2026-10-01' })
+    expect(result.data?.totalAmount).toBe(25.6)
     expect(calls('dashboard/users-ranking')[0][1]?.query).toEqual({ start_date: '2026-10-01', end_date: '2026-10-01', timezone: 'Asia/Shanghai', limit: '50' })
     expect(request.mock.calls.map(([path]) => path).sort()).toEqual(['dashboard/users-ranking', 'users'])
     const hour = await monitor.rankings(hourly)
     expect(hour.data?.rows.map(row => [row.userId, row.amount])).toEqual([[12, 0.86], [11, 0.42], [13, 0.18]])
     expect(hour.data?.period).toBe('2026-10-01 20:00')
+    expect(hour.data?.totalAmount).toBe(1.46)
     expect(calls('dashboard/users-ranking')).toHaveLength(1)
   })
   it.each<[RankingRange, string]>([['7d', '2026-09-25'], ['30d', '2026-09-02']])('requests %s with inclusive natural-day bounds and keeps its cache separate', async (range, startDate) => {
@@ -36,6 +38,7 @@ describe('selectable upstream user consumption rankings', () => {
     expect(result.data).toMatchObject({ range, startDate, endDate: '2026-10-01', period: `${startDate}/2026-10-01` })
     expect(calls('dashboard/users-ranking')[1][1]?.query).toMatchObject({ start_date: startDate, end_date: '2026-10-01' })
     expect(result.data?.rows[0].amount).toBe(12.84 * (range === '7d' ? 7 : 30))
+    expect(result.data?.totalAmount).toBeCloseTo(25.6 * (range === '7d' ? 7 : 30), 10)
     expect((await monitor.rankings(input)).data).toEqual(today.data)
     expect(calls('dashboard/users-ranking')).toHaveLength(2)
   })
@@ -47,6 +50,7 @@ describe('selectable upstream user consumption rankings', () => {
   it('honors inclusion, name fallbacks and deterministic actual-cost ordering', async () => {
     const { monitor, calls } = setup(async (path, options) => path === 'dashboard/users-ranking' ? {
       start_date: options!.query!.start_date, end_date: options!.query!.end_date,
+      total_actual_cost: 0.3,
       ranking: [row(3, 0.1), { ...row(2, 0.1), username: '', email: 'user@example.test', tokens: 300 },
         { ...row(1, 0.1), username: '', tokens: 300, actual_cost: '0.10' }],
     } : undefined)
@@ -54,6 +58,87 @@ describe('selectable upstream user consumption rankings', () => {
     expect(result.data?.rows.map(row => [row.userId, row.name])).toEqual([[1, '用户 #1'], [2, 'user@example.test'], [3, '用户 3']])
     expect((await monitor.rankings({ ...hourly, includeAdmin: true })).data?.rows[0].userId).toBe(7)
     expect(calls('users')).toHaveLength(0)
+  })
+  it('uses the upstream full-range total even when only 50 users are returned and 12 displayed', async () => {
+    const { monitor, request } = setup(async (path, options) => path === 'dashboard/users-ranking' ? {
+      start_date: options!.query!.start_date, end_date: options!.query!.end_date,
+      total_actual_cost: '5000.30', ranking: Array.from({ length: 50 }, (_, i) => row(i + 1, 1)),
+    } : undefined)
+    const result = await monitor.rankings({ ...input, includeAdmin: true })
+    expect(result.data?.rows).toHaveLength(12)
+    expect(result.data?.totalAmount).toBe(5000.3)
+    expect(request.mock.calls.map(([path]) => path)).toEqual(['dashboard/users-ranking'])
+  })
+  it('deducts Admins outside the returned rank and shares their aggregate costs across devices', async () => {
+    const { monitor, calls } = setup(async (path, options) => {
+      if (path === 'users') return { total: 2, items: [{ id: 11, role: 'admin' }, { id: 999, role: 'admin' }] }
+      if (path === 'dashboard/users-ranking') return {
+        start_date: options!.query!.start_date, end_date: options!.query!.end_date,
+        total_actual_cost: '101.30', ranking: Array.from({ length: 50 }, (_, i) => row(i + 11, 2)),
+      }
+      if (path === 'usage/stats') return { total_actual_cost: '0.30' }
+    })
+    const selected = { ...input, range: '7d' as const }
+    const results = await Promise.all(Array.from({ length: 20 }, () => monitor.rankings(selected)))
+    expect(results.every(result => result.data?.totalAmount === 99)).toBe(true)
+    expect(results[0].data?.rows.every(row => row.userId !== 11 && row.userId !== 999)).toBe(true)
+    expect(calls('usage/stats')).toHaveLength(1)
+    expect(calls('usage/stats')[0][1]?.query).toEqual({ start_date: '2026-09-25', end_date: '2026-10-01', timezone: 'Asia/Shanghai', user_id: '999', nocache: 'true' })
+    expect((await monitor.rankings({ ...selected, includeAdmin: true })).data?.totalAmount).toBe(101.3)
+    await monitor.rankings(selected)
+    expect(calls('usage/stats')).toHaveLength(1)
+    await monitor.rankings({ ...selected, force: true })
+    expect(calls('usage/stats')).toHaveLength(2)
+  })
+  it('sums every eligible current-hour user before limiting the displayed rank', async () => {
+    const { monitor, request } = setup(async path => path === 'dashboard/users-trend' ? {
+      start_date: '2026-10-01', end_date: '2026-10-01', granularity: 'hour', trend: [
+        ...Array.from({ length: 15 }, (_, i) => ({ ...row(i + 11, 0.1), date: '2026-10-01 20:00' })),
+        { ...row(7, 0.8), date: '2026-10-01 20:00' },
+        { ...row(500, 1000), date: '2026-10-01 19:00' },
+      ],
+    } : undefined)
+    const excluded = await monitor.rankings(hourly)
+    expect(excluded.data?.rows).toHaveLength(12)
+    expect(excluded.data?.totalAmount).toBe(1.5)
+    expect((await monitor.rankings({ ...hourly, includeAdmin: true })).data?.totalAmount).toBe(2.3)
+    expect(request.mock.calls.every(([path]) => ['users', 'dashboard/users-trend'].includes(path))).toBe(true)
+  })
+  it('preserves the last complete rank and total when a missing Admin aggregate fails', async () => {
+    let fail = false
+    const { monitor } = setup(async (path, options) => {
+      if (path === 'dashboard/users-ranking') return { start_date: options!.query!.start_date, end_date: options!.query!.end_date, total_actual_cost: 10, ranking: [row(11, 2)] }
+      if (path === 'usage/stats') { if (fail) throw new Error('Admin 消费暂不可用'); return { total_actual_cost: 1 } }
+    })
+    const previous = await monitor.rankings(input)
+    expect(previous.data?.totalAmount).toBe(9)
+    fail = true
+    const result = await monitor.rankings({ ...input, force: true })
+    expect(result.data).toEqual(previous.data)
+    expect(result.error).toBe('Admin 消费暂不可用')
+  })
+  it('rejects missing or invalid upstream totals and preserves the previous complete result', async () => {
+    for (const value of [undefined, -1, NaN, Infinity, 'invalid']) {
+      let fail = false
+      const { monitor } = setup(async (path, options) => fail && path === 'dashboard/users-ranking' ? {
+        start_date: options!.query!.start_date, end_date: options!.query!.end_date, total_actual_cost: value, ranking: [],
+      } : undefined)
+      const previous = await monitor.rankings({ ...input, includeAdmin: true })
+      fail = true
+      const result = await monitor.rankings({ ...input, includeAdmin: true, force: true })
+      expect(result.data).toEqual(previous.data)
+      expect(result.error).toBeTruthy()
+    }
+  })
+  it('shows zero only for a valid empty range and fails closed on inconsistent Admin deductions', async () => {
+    const { monitor } = setup(async (path, options) => {
+      if (path === 'dashboard/users-ranking') return { start_date: options!.query!.start_date, end_date: options!.query!.end_date, total_actual_cost: 0, ranking: [] }
+      if (path === 'usage/stats') return { total_actual_cost: 1 }
+    })
+    expect((await monitor.rankings({ ...input, includeAdmin: true })).data).toMatchObject({ totalAmount: 0, rows: [] })
+    const excluded = await monitor.rankings(input)
+    expect(excluded.data).toBeNull()
+    expect(excluded.error).toMatch(/口径不一致/)
   })
   it('expands whole-day token selections so a low-token user can lead the hourly cost rank', async () => {
     const { monitor, calls } = setup(async (path, options) => path === 'dashboard/users-trend' ? {
@@ -78,7 +163,7 @@ describe('selectable upstream user consumption rankings', () => {
     const { monitor, calls } = setup(async (path, options) => {
       const query = options!.query!
       if (path === 'users') return { total: 40, items: Array.from({ length: 40 }, (_, i) => ({ id: i + 1, role: 'admin' })) }
-      if (path === 'dashboard/users-ranking') return { start_date: query.start_date, end_date: query.end_date, ranking: Array.from({ length: 50 }, (_, i) => row(i + 1, 100 - i)) }
+      if (path === 'dashboard/users-ranking') return { start_date: query.start_date, end_date: query.end_date, total_actual_cost: 4015, ranking: Array.from({ length: 50 }, (_, i) => row(i + 1, 100 - i)) }
       if (path === 'dashboard/users-trend') return {
         start_date: query.start_date, end_date: query.end_date, granularity: 'day',
         trend: Array.from({ length: 55 }, (_, i) => ({ ...row(i + 1, 100 - i), date: query.start_date })),
@@ -86,13 +171,14 @@ describe('selectable upstream user consumption rankings', () => {
     })
     const result = await monitor.rankings({ ...input, range: '7d' })
     expect(result.data?.rows.map(row => row.userId)).toEqual(Array.from({ length: 12 }, (_, i) => i + 41))
+    expect(result.data?.totalAmount).toBe(795)
     expect(calls('dashboard/users-trend')[0][1]?.query).toMatchObject({ granularity: 'day', start_date: '2026-09-25', end_date: '2026-10-01' })
   })
   it('combines a user across multiple aggregate days exactly in the Admin fallback', async () => {
     const { monitor } = setup(async (path, options) => {
       const query = options!.query!
       if (path === 'users') return { total: 50, items: Array.from({ length: 50 }, (_, i) => ({ id: i + 1, role: 'admin' })) }
-      if (path === 'dashboard/users-ranking') return { start_date: query.start_date, end_date: query.end_date, ranking: Array.from({ length: 50 }, (_, i) => row(i + 1)) }
+      if (path === 'dashboard/users-ranking') return { start_date: query.start_date, end_date: query.end_date, total_actual_cost: 1275.3, ranking: Array.from({ length: 50 }, (_, i) => row(i + 1)) }
       if (path === 'dashboard/users-trend') return { start_date: query.start_date, end_date: query.end_date, granularity: 'day', trend: [
         { ...row(100), actual_cost: '0.1', date: query.start_date }, { ...row(100), actual_cost: '0.2', date: query.end_date },
       ] }
@@ -100,6 +186,7 @@ describe('selectable upstream user consumption rankings', () => {
     const result = await monitor.rankings({ ...input, range: '30d' })
     expect(result.data?.rows).toHaveLength(1)
     expect(result.data?.rows[0]).toMatchObject({ userId: 100, amount: 0.3, requests: 200, tokens: 20000 })
+    expect(result.data?.totalAmount).toBe(0.3)
   })
   it('keeps hourly buckets in upstream timezone while calendar-day ranges use the preference', async () => {
     vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
@@ -113,7 +200,7 @@ describe('selectable upstream user consumption rankings', () => {
     const { monitor } = setup(async path => path === 'dashboard/users-trend' ? {
       start_date: '2026-10-01', end_date: '2026-10-01', granularity: 'hour', trend: [{ ...row(11), date: '2026-10-01 19:00' }],
     } : undefined)
-    expect(await monitor.rankings(hourly)).toMatchObject({ data: { rows: [], period: '2026-10-01 20:00' }, error: null })
+    expect(await monitor.rankings(hourly)).toMatchObject({ data: { rows: [], totalAmount: 0, period: '2026-10-01 20:00' }, error: null })
   })
   it.each<RankingRange>(['hour', 'today', '7d', '30d'])('shares %s aggregates and Admin lookups across devices and inclusion settings', async range => {
     const { monitor, calls } = setup()
@@ -163,7 +250,7 @@ describe('selectable upstream user consumption rankings', () => {
   })
   it('rejects invalid costs, duplicate users, mismatched range dates and duplicate hour points', async () => {
     for (const ranking of [[{ ...row(1), actual_cost: -1 }], [row(1), row(1)]]) {
-      const { monitor } = setup(async path => path === 'dashboard/users-ranking' ? { start_date: '2026-10-01', end_date: '2026-10-01', ranking } : undefined)
+      const { monitor } = setup(async path => path === 'dashboard/users-ranking' ? { start_date: '2026-10-01', end_date: '2026-10-01', total_actual_cost: 1, ranking } : undefined)
       const result = await monitor.rankings(input)
       expect(result.data).toBeNull(); expect(result.error).toBeTruthy()
       expect((await monitor.rankings(hourly)).error).toBeNull()
