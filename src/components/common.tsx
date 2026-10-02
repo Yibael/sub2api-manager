@@ -16,6 +16,7 @@ import { Spinner } from '@/components/ui/spinner'
 import { AccountSkeleton, LoadingValue, QuotaSkeleton, StableRegion } from '@/components/loading'
 import { useWorkspace } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
+import { formatQuotaCountdown } from '@/lib/quota-countdown'
 import { accountState, providerNames, type Account, type Quota } from '../../shared/domain'
 import type { MonitorData } from '@/lib/monitor'
 
@@ -59,13 +60,12 @@ export function Metric({ label, value, icon, loading = false }: { label: string;
   return <Card className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent><div className="metric-value"><LoadingValue loading={loading}>{value}</LoadingValue></div></CardContent></Card>
 }
 export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: number; estimatedCost?: number | null }) {
-  const remaining = quota.resetsAt ? Math.ceil((Date.parse(quota.resetsAt) - now) / 60000) : null
-  const reset = remaining === null ? null : remaining <= 0 ? '等待额度更新' : remaining >= 1440 ? `${Math.floor(remaining / 1440)} 天后重置` : remaining >= 60 ? `${Math.floor(remaining / 60)} 小时 ${remaining % 60} 分后重置` : `${remaining} 分钟后重置`
+  const reset = formatQuotaCountdown(quota.resetsAt, now)
   return <div className={cn('quota-row', quota.percent !== null && quota.percent >= 90 && 'quota-warning')}>
     <div className="flex items-center justify-between gap-3"><span>{quota.name}</span><span className="quota-number">{quota.percent === null ? '未知' : `${quota.percent.toFixed(0)}%`}</span></div>
     <Progress value={quota.percent === null ? 0 : Math.min(100, quota.percent)} aria-label={`${quota.name}已用`} />
     <div className="quota-footnote">
-      {reset && <span>{reset}</span>}
+      {reset && <span className="tabular-nums">{reset}</span>}
       {quota.limit !== null && <span><Money value={quota.used} /> / <Money value={quota.limit} /></span>}
       {estimatedCost !== undefined && <span className="quota-estimate">估算额度 <Money value={estimatedCost} /></span>}
     </div>
