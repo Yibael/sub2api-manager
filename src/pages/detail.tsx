@@ -1,10 +1,10 @@
 import { useState } from 'react'
-import { Link, useParams } from '@tanstack/react-router'
-import { ArrowLeft, CreditCard, Pin, PinOff } from 'lucide-react'
+import { useParams } from '@tanstack/react-router'
+import { CreditCard, Pin, PinOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMonitor } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
-import { ErrorNotice, Money, PageHeading, ProviderMark, QuotaList, RefreshButton } from '@/components/common'
+import { BackButton, ErrorNotice, Money, PageHeading, ProviderMark, QuotaList, RefreshButton } from '@/components/common'
 import { DetailSkeleton, LoadingValue, StableRegion } from '@/components/loading'
 import { SubscriptionEditor } from '@/components/subscription-editor'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/ui/card'
@@ -26,7 +26,7 @@ export function DetailPage() {
   const todayPending = !today?.data && !today?.error && !monitor.today.error
   const spendingPending = !!subscription && !spending && !monitor.spending.error
   return <div className="page-stack">
-    <div><Button variant="ghost" asChild><Link to="/accounts"><ArrowLeft data-icon="inline-start" />返回账号</Link></Button></div>
+    <div><BackButton fallback="/accounts" /></div>
     <PageHeading title={account?.name ?? `账号 #${rawId}`} action={<RefreshButton countdown={monitor.nextRefreshIn} busy={monitor.isFetching} onClick={() => void monitor.refresh()} />} />
     <ErrorNotice message={!valid ? '账号 ID 无效' : monitor.status.error?.message ?? sample?.error ?? monitor.today.error?.message ?? today?.error ?? monitor.quota.error?.message ?? usage?.error} />
     <StableRegion phase={pending ? 'pending' : 'ready'} busy={monitor.isFetching} contentClassName="page-stack">

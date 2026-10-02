@@ -1,10 +1,10 @@
-import { ArrowUpRight, CircleAlert, Layers, Pin, Plus, RefreshCw } from 'lucide-react'
+import { ArrowLeft, ArrowUpRight, CircleAlert, Layers, Pin, Plus, RefreshCw } from 'lucide-react'
 import openaiIcon from '@lobehub/icons-static-svg/icons/openai.svg'
 import claudeIcon from '@lobehub/icons-static-svg/icons/claude.svg'
 import geminiIcon from '@lobehub/icons-static-svg/icons/gemini.svg'
 import antigravityIcon from '@lobehub/icons-static-svg/icons/antigravity.svg'
 import grokIcon from '@lobehub/icons-static-svg/icons/grok.svg'
-import { Link } from '@tanstack/react-router'
+import { Link, useCanGoBack, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
@@ -39,6 +39,13 @@ export function ErrorNotice({ message }: { message: string | null | undefined })
 export function PageHeading({ title, action }: { title: string; action?: ReactNode }) {
   return <div className="page-heading"><h1 title={title}>{title}</h1>{action}</div>
 }
+export function BackButton({ fallback }: { fallback: '/accounts' | '/settings' }) {
+  const router = useRouter(), canGoBack = useCanGoBack()
+  return <Button type="button" variant="ghost" onClick={() => {
+    if (canGoBack) router.history.back()
+    else void router.navigate({ to: fallback, replace: true })
+  }}><ArrowLeft data-icon="inline-start" />返回</Button>
+}
 export function RefreshButton({ busy, onClick, countdown, label = '立即刷新' }: { busy: boolean; onClick: () => void; countdown?: number | null; label?: string }) {
   const [finishing, setFinishing] = useState(busy)
   if (busy && !finishing) setFinishing(true)
@@ -54,7 +61,7 @@ export function RefreshButton({ busy, onClick, countdown, label = '立即刷新'
   </Button>
 }
 export function NoPins() {
-  return <Empty className="empty-panel"><EmptyHeader><EmptyMedia variant="icon"><Pin /></EmptyMedia><EmptyTitle>暂无关注账号</EmptyTitle></EmptyHeader><EmptyContent><Button asChild><Link to="/accounts"><Plus data-icon="inline-start" />选择账号</Link></Button></EmptyContent></Empty>
+  return <Empty className="empty-panel"><EmptyHeader><EmptyMedia variant="icon"><Pin /></EmptyMedia><EmptyTitle>暂无关注账号</EmptyTitle></EmptyHeader><EmptyContent><Button asChild><Link to="/accounts" replace><Plus data-icon="inline-start" />选择账号</Link></Button></EmptyContent></Empty>
 }
 export function Metric({ label, value, icon, loading = false }: { label: string; value: ReactNode; icon: ReactNode; loading?: boolean }) {
   return <Card className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent><div className="metric-value"><LoadingValue loading={loading}>{value}</LoadingValue></div></CardContent></Card>
@@ -80,7 +87,7 @@ export function QuotaList({ quotas, pending, empty, now, estimatedCost, limit }:
 }
 export function AccountCard({ id, monitor }: { id: number; monitor: MonitorData }) {
   const sample = monitor.status.data?.[id], account = sample?.data
-  if (!account) return <StableRegion phase={sample?.error || monitor.status.error ? 'error' : 'pending'}>{sample?.error || monitor.status.error ? <Card className="account-card"><CardHeader><CardTitle>账号 #{id}</CardTitle><CardDescription>{sample?.error ?? monitor.status.error?.message}</CardDescription></CardHeader><CardContent><p className="quota-empty">账号暂不可用</p></CardContent><CardFooter><Button variant="ghost" asChild><Link to="/accounts">管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></CardFooter></Card> : <AccountSkeleton />}</StableRegion>
+  if (!account) return <StableRegion phase={sample?.error || monitor.status.error ? 'error' : 'pending'}>{sample?.error || monitor.status.error ? <Card className="account-card"><CardHeader><CardTitle>账号 #{id}</CardTitle><CardDescription>{sample?.error ?? monitor.status.error?.message}</CardDescription></CardHeader><CardContent><p className="quota-empty">账号暂不可用</p></CardContent><CardFooter><Button variant="ghost" asChild><Link to="/accounts" replace>管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></CardFooter></Card> : <AccountSkeleton />}</StableRegion>
   const usage = monitor.quota.data?.[id], today = monitor.today.data?.items[id]
   const quotas = account.supportsUsage ? usage?.data?.windows ?? [] : account.localQuotas
   const weeklyEstimate = account.platform === 'openai' && account.type === 'oauth' ? usage?.data?.estimatedWeeklyCost ?? null : undefined

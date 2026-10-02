@@ -1,12 +1,12 @@
 import { useEffect, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useForm } from '@tanstack/react-form'
-import { ChevronRight, ArrowLeft, Network, RefreshCw, Smartphone, Moon, Sun, Monitor, Download, Upload, LogOut, EyeOff, ShieldCheck, SlidersHorizontal, Fingerprint } from 'lucide-react'
+import { ChevronRight, Network, RefreshCw, Smartphone, Moon, Sun, Monitor, Download, Upload, LogOut, EyeOff, ShieldCheck, SlidersHorizontal, Fingerprint } from 'lucide-react'
 import { toast } from 'sonner'
 import { z } from 'zod'
 import { useWorkspace, preferencesSchema } from '@/lib/preferences'
 import { api, lockSession } from '@/lib/api'
-import { PageHeading, ErrorNotice } from '@/components/common'
+import { BackButton, PageHeading, ErrorNotice } from '@/components/common'
 import { PasskeySettings } from '@/components/passkey-settings'
 import { workspacePreferencesSchema } from '../../shared/preferences'
 import { InstallHelp } from '@/components/pwa'
@@ -24,7 +24,7 @@ import { defaultIntervals, intervalsSchema, type Intervals } from '../../shared/
 export function SettingsPage() {
   const path = useRouterState({ select: state => state.location.pathname })
   const { preferences, update } = useWorkspace()
-  return <div className="page-stack settings-page">{path !== '/settings' && <div><Button variant="ghost" asChild><Link to="/settings"><ArrowLeft data-icon="inline-start" />返回设置</Link></Button></div>}<PageHeading title={path.endsWith('/connection') ? '连接设置' : path.endsWith('/preferences') ? '刷新与统计' : path.endsWith('/security') ? '登录与安全' : path.endsWith('/app') ? '应用与数据' : '设置'} />
+  return <div className="page-stack settings-page">{path !== '/settings' && <div><BackButton fallback="/settings" /></div>}<PageHeading title={path.endsWith('/connection') ? '连接设置' : path.endsWith('/preferences') ? '刷新与统计' : path.endsWith('/security') ? '登录与安全' : path.endsWith('/app') ? '应用与数据' : '设置'} />
     {path === '/settings' ? <><Card><CardHeader><CardTitle>外观与隐私</CardTitle></CardHeader><CardContent><div className="settings-row"><div><h3>主题</h3></div><ToggleGroup type="single" value={preferences.theme} onValueChange={theme => { if (theme) update({ theme: theme as 'light' | 'dark' | 'system' }) }} variant="outline"><ToggleGroupItem value="light" aria-label="浅色主题"><Sun /></ToggleGroupItem><ToggleGroupItem value="dark" aria-label="深色主题"><Moon /></ToggleGroupItem><ToggleGroupItem value="system" aria-label="跟随系统"><Monitor /></ToggleGroupItem></ToggleGroup></div><Separator /><div className="settings-row"><div><h3 className="flex items-center gap-2"><EyeOff className="size-4" />隐藏金额</h3></div><Switch aria-label="隐藏金额" checked={preferences.hideAmounts} onCheckedChange={hideAmounts => update({ hideAmounts })} /></div></CardContent></Card><Card><CardContent className="settings-links">{[
       { to: '/settings/connection', icon: Network, title: '连接设置' },
       { to: '/settings/security', icon: Fingerprint, title: '登录与安全' },
