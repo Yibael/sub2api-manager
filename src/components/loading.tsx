@@ -1,6 +1,6 @@
 import { useLayoutEffect, useRef, useState, type ReactNode } from 'react'
 import { useRouterState } from '@tanstack/react-router'
-import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Skeleton } from '@/components/ui/skeleton'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { cn } from '@/lib/utils'
@@ -45,11 +45,11 @@ export function QuotaSkeleton() {
 }
 
 export function AccountSkeleton() {
-  return <Card className="account-card" role="status" aria-label="正在读取账号"><CardHeader><div className="account-link flex min-w-0 items-center gap-3"><Skeleton className="size-[39px] shrink-0" /><div className="flex min-w-0 flex-col gap-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-20" /></div></div></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><LoadingValue loading>—</LoadingValue></div></div><div><p className="number-label">当前并发</p><div className="concurrency"><LoadingValue loading>—</LoadingValue></div></div></div><div className="quota-list"><QuotaSkeleton /><QuotaSkeleton /></div></CardContent></Card>
+  return <Card className="account-card" role="status" aria-label="正在读取账号"><CardHeader className="gap-3"><div className="account-link flex min-w-0 items-center gap-3"><Skeleton className="size-[39px] shrink-0" /><Skeleton className="h-4 w-28" /></div><CardAction className="row-span-1 self-center"><Skeleton className="h-5 w-20" /></CardAction><CardDescription className="col-span-2 flex gap-1.5"><Skeleton className="h-5 w-16" /><Skeleton className="h-5 w-14" /></CardDescription></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><LoadingValue loading>—</LoadingValue></div></div><div><p className="number-label">当前并发</p><div className="concurrency"><LoadingValue loading>—</LoadingValue></div></div></div><div className="quota-list"><QuotaSkeleton /><QuotaSkeleton /></div></CardContent></Card>
 }
 
 export function DirectorySkeleton({ rows = 4 }: { rows?: number }) {
-  return <div role="status" aria-label="正在读取账号目录">{Array.from({ length: rows }, (_, index) => <div key={index} className="directory-row" aria-hidden="true"><Skeleton className="size-[39px] shrink-0" /><div className="directory-info flex flex-col gap-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-20" /></div><div className="directory-actions"><Skeleton className="h-11 w-10 md:h-10" /><Skeleton className="h-11 w-20 md:h-10" /><Skeleton className="h-11 w-10 md:h-10" /></div></div>)}</div>
+  return <div role="status" aria-label="正在读取账号目录">{Array.from({ length: rows }, (_, index) => <div key={index} className="directory-row" aria-hidden="true"><Skeleton className="size-[39px] shrink-0" /><div className="directory-info flex flex-col gap-2"><div className="flex items-center justify-between gap-3"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-20" /></div><div className="flex flex-wrap gap-1.5"><Skeleton className="h-5 w-16" /><Skeleton className="h-5 w-14" /><Skeleton className="h-5 w-8" /></div></div><div className="directory-actions"><Skeleton className="h-11 w-10 md:h-10" /><Skeleton className="h-11 w-20 md:h-10" /><Skeleton className="h-11 w-10 md:h-10" /></div></div>)}</div>
 }
 
 export function DetailSkeleton({ cycle = true }: { cycle?: boolean }) {

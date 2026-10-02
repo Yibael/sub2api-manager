@@ -1,7 +1,8 @@
 import { useEffect, useState } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { toast } from 'sonner'
-import { Download, Share, PlusSquare } from 'lucide-react'
+import { Check, Download, Share, PlusSquare } from 'lucide-react'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 
@@ -21,5 +22,5 @@ export function InstallHelp() {
     window.addEventListener('appinstalled', done)
     return () => { window.removeEventListener('beforeinstallprompt', before); window.removeEventListener('appinstalled', done) }
   }, [])
-  return <div className="flex flex-col gap-4">{installed ? <p className="text-sm text-muted-foreground">已安装</p> : install ? <Button onClick={async () => { await install.prompt(); const result = await install.userChoice; if (result.outcome === 'accepted') setInstall(null) }}><Download data-icon="inline-start" />安装应用</Button> : <p className="text-sm text-muted-foreground">Safari <Share className="inline size-4" /> 分享 → <PlusSquare className="inline size-4" /> 添加到主屏幕</p>}</div>
+  return <div className="flex flex-col gap-4">{installed ? <Badge variant="secondary"><Check data-icon="inline-start" />已安装</Badge> : install ? <Button onClick={async () => { await install.prompt(); const result = await install.userChoice; if (result.outcome === 'accepted') setInstall(null) }}><Download data-icon="inline-start" />安装应用</Button> : <p className="text-sm text-muted-foreground">Safari <Share className="inline size-4" /> 分享 → <PlusSquare className="inline size-4" /> 添加到主屏幕</p>}</div>
 }

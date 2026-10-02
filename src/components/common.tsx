@@ -6,18 +6,18 @@ import antigravityIcon from '@lobehub/icons-static-svg/icons/antigravity.svg'
 import grokIcon from '@lobehub/icons-static-svg/icons/grok.svg'
 import { Link, useCanGoBack, useRouter } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
-import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
 import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyContent } from '@/components/ui/empty'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Spinner } from '@/components/ui/spinner'
+import { AccountBadges, AccountStatusBadges } from '@/components/account-badges'
 import { AccountSkeleton, LoadingValue, QuotaSkeleton, StableRegion } from '@/components/loading'
 import { useWorkspace } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 import { formatQuotaCountdown } from '@/lib/quota-countdown'
-import { accountState, providerNames, type Account, type Quota } from '../../shared/domain'
+import { type Quota } from '../../shared/domain'
 import type { MonitorData } from '@/lib/monitor'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
@@ -91,8 +91,6 @@ export function AccountCard({ id, monitor }: { id: number; monitor: MonitorData 
   const usage = monitor.quota.data?.[id], today = monitor.today.data?.items[id]
   const quotas = account.supportsUsage ? usage?.data?.windows ?? [] : account.localQuotas
   const weeklyEstimate = account.platform === 'openai' && account.type === 'oauth' ? usage?.data?.estimatedWeeklyCost ?? null : undefined
-  const state = accountState(account, monitor.now)
   const errors = [sample.error, today?.error, usage?.error].filter(Boolean)
-  return <StableRegion phase="ready"><Card className={cn('account-card', sample.error && 'account-stale')}><CardHeader><Link className="account-link flex min-w-0 items-center gap-3" to="/accounts/$id" params={{ id: String(id) }}><ProviderMark platform={account.platform} /><div className="min-w-0"><CardTitle><span className="account-name">{account.name}</span></CardTitle><CardDescription>{providerNames[account.platform] ?? account.platform} <span className="mx-1">·</span> {account.type === 'oauth' ? 'OAuth' : account.type === 'setup-token' ? 'Setup Token' : 'API Key'}</CardDescription></div></Link><CardAction><Badge variant="outline" className={cn('state-badge', state === '可调度' && !sample.error && 'state-ok')}><span className="status-dot" />{sample.error ? '更新失败' : state}</Badge></CardAction></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><Money value={today?.data?.standardCost} loading={!today?.data && !today?.error && !monitor.today.error} /></div></div><div><p className="number-label">当前并发</p><div className="concurrency">{account.currentConcurrency ?? '—'}<span> / {account.concurrency ?? '—'}</span></div></div></div><QuotaList quotas={quotas} pending={account.supportsUsage && !usage?.data && !usage?.error && !monitor.quota.error} empty={account.supportsUsage ? usage?.error ?? '暂无可用额度数据' : '未配置额度'} now={monitor.now} estimatedCost={weeklyEstimate} limit={2} />{errors.length > 0 && <p role="status" className="field-warning">{errors.join('；')}。{sample.updatedAt ? `最近成功：${new Date(sample.updatedAt).toLocaleTimeString('zh-CN')}` : ''}</p>}</CardContent></Card></StableRegion>
+  return <StableRegion phase="ready"><Card className="account-card"><CardHeader className="gap-3"><Link className="account-link flex min-w-0 items-center gap-3" to="/accounts/$id" params={{ id: String(id) }}><ProviderMark platform={account.platform} /><CardTitle className="min-w-0"><span className="account-name">{account.name}</span></CardTitle></Link><CardAction className="row-span-1 self-center"><AccountStatusBadges account={account} now={monitor.now} stale={!!sample.error || !!monitor.status.error} /></CardAction><CardDescription className="col-span-2"><AccountBadges account={account} /></CardDescription></CardHeader><CardContent className="flex flex-col gap-6"><div className="account-numbers"><div><p className="number-label">今日标准用量</p><div className="account-amount"><Money value={today?.data?.standardCost} loading={!today?.data && !today?.error && !monitor.today.error} /></div></div><div><p className="number-label">当前并发</p><div className="concurrency">{account.currentConcurrency ?? '—'}<span> / {account.concurrency ?? '—'}</span></div></div></div><QuotaList quotas={quotas} pending={account.supportsUsage && !usage?.data && !usage?.error && !monitor.quota.error} empty={account.supportsUsage ? usage?.error ?? '暂无可用额度数据' : '未配置额度'} now={monitor.now} estimatedCost={weeklyEstimate} limit={2} />{errors.length > 0 && <p role="status" className="field-warning">{errors.join('；')}。{sample.updatedAt ? `最近成功：${new Date(sample.updatedAt).toLocaleTimeString('zh-CN')}` : ''}</p>}</CardContent></Card></StableRegion>
 }
-export function accountLabel(account: Account) { return `${providerNames[account.platform] ?? account.platform} · ${account.type === 'oauth' ? 'OAuth' : 'API Key'}` }

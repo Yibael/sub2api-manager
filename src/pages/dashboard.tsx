@@ -5,6 +5,7 @@ import { useMemo } from 'react'
 import { useMonitor, type MonitorData } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
 import { AccountCard, ErrorNotice, Metric, Money, NoPins, PageHeading, RefreshButton } from '@/components/common'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { overviewTotals } from '@/lib/overview'
 
@@ -27,7 +28,7 @@ export function DashboardPage() {
       <Metric label="今日标准用量" value={<Money value={totals.standardUsage} />} icon={<ChartNoAxesCombined />} loading={monitor.today.isFetching && !monitor.today.data} />
     </div>
     {statsError && <ErrorNotice message="部分消费统计暂不可用" />}
-    <section className="flex flex-col gap-5"><div className="section-heading"><div className="flex items-center gap-2"><Pin className="size-4" /><h2>关注的账号</h2><span className="section-count">{preferences.pins.length}</span></div><Button variant="ghost" asChild><Link to="/accounts" replace>管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></div>{preferences.pins.length ? <div className="account-grid">{preferences.pins.map(id => <AccountCard key={id} id={id} monitor={monitor} />)}</div> : <NoPins />}</section>
+    <section className="flex flex-col gap-5"><div className="section-heading"><div className="flex items-center gap-2"><Pin className="size-4" /><h2>关注的账号</h2><Badge variant="secondary" className="tabular-nums">{preferences.pins.length}</Badge></div><Button variant="ghost" asChild><Link to="/accounts" replace>管理账号<ArrowUpRight data-icon="inline-end" /></Link></Button></div>{preferences.pins.length ? <div className="account-grid">{preferences.pins.map(id => <AccountCard key={id} id={id} monitor={monitor} />)}</div> : <NoPins />}</section>
 
   </div>
 }

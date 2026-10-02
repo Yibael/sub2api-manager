@@ -9,6 +9,7 @@ import { PreferencesMigration } from '@/components/preferences-migration'
 import { PreferencesProvider, useWorkspace } from '@/lib/preferences'
 import { Brand, ErrorNotice } from '@/components/common'
 import { PwaUpdate } from '@/components/pwa'
+import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingValue, LoginSkeleton, RouteSkeleton, StableRegion } from '@/components/loading'
 import { Toaster } from '@/components/ui/sonner'
@@ -40,6 +41,6 @@ function Shell() {
 function AppFrame({ children, pins }: { children: ReactNode; pins?: number }) {
   const pathname = useRouterState({ select: state => state.location.pathname })
   const current = navigation.find(item => item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)) ?? navigation[0]
-  return <div className="app-shell"><aside className="desktop-sidebar"><Link to="/" replace aria-label="返回概览"><Brand /></Link><nav aria-label="主导航" className="desktop-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace className="nav-item" data-active={current.to === item.to}><item.icon /><span>{item.label}</span>{item.to === '/accounts' && <span className="nav-count"><LoadingValue loading={pins === undefined}>{pins}</LoadingValue></span>}</Link>)}</nav><div className="sidebar-bottom"><Link className="nav-item" to="/settings/app"><Download /><span>安装应用</span></Link></div></aside>
+  return <div className="app-shell"><aside className="desktop-sidebar"><Link to="/" replace aria-label="返回概览"><Brand /></Link><nav aria-label="主导航" className="desktop-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace className="nav-item" data-active={current.to === item.to}><item.icon /><span>{item.label}</span>{item.to === '/accounts' && <Badge variant="secondary" className="ml-auto tabular-nums"><LoadingValue loading={pins === undefined}>{pins}</LoadingValue></Badge>}</Link>)}</nav><div className="sidebar-bottom"><Link className="nav-item" to="/settings/app"><Download /><span>安装应用</span></Link></div></aside>
     <div className="app-main"><main className="main-content">{children}</main></div><nav aria-label="移动导航" className="mobile-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace data-active={current.to === item.to}><item.icon /><span>{item.label}</span></Link>)}</nav></div>
 }
