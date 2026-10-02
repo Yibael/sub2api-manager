@@ -6,12 +6,15 @@ export class PageSession {
   private flow: number | null = null
   private nextFlow = 0
   private suspendedValue = false
+  private requireEntryVerificationValue = true
   private listeners = new Set<() => void>()
   get token() { return this.value }
   get epoch() { return this.epochValue }
   get unlocked() { return !!this.value && !this.suspendedValue }
   get verifying() { return this.flow !== null }
   get suspended() { return this.suspendedValue }
+  get requireEntryVerification() { return this.requireEntryVerificationValue }
+  setRequireEntryVerification(required: boolean) { this.requireEntryVerificationValue = required }
   getSnapshot = () => this.revision
   subscribe = (listener: () => void) => { this.listeners.add(listener); return () => { this.listeners.delete(listener) } }
   private notify() { this.revision++; for (const listener of this.listeners) listener() }
@@ -30,6 +33,7 @@ export class PageSession {
     return previous
   }
   suspend() { this.suspendedValue = true; this.notify() }
+  resume() { if (this.suspendedValue) { this.suspendedValue = false; this.notify() } }
   beginVerification() {
     if (this.verifying) throw new Error('请先完成当前 Passkey 验证')
     const id = ++this.nextFlow
@@ -37,10 +41,9 @@ export class PageSession {
     return { epoch: this.epochValue, finish: (verified: boolean, visible: boolean) => {
       if (this.flow !== id) return false
       this.flow = null
-      // A system credential sheet may hide the page. Only a successful user
-      // verification can release that suspension; cancellation locks the page.
-      const lock = !visible || (this.suspendedValue && !verified)
-      if (!lock) this.suspendedValue = false
+      // With entry verification enabled, cancelling a hidden credential sheet locks the page.
+      const lock = this.requireEntryVerification && (!visible || (this.suspendedValue && !verified))
+      if (!lock && visible) this.suspendedValue = false
       this.notify()
       return lock
     } }
@@ -48,20 +51,26 @@ export class PageSession {
 }
 export const pageSession = new PageSession()
 
-export function bindPageLifecycle(session: PageSession, document: EventTarget & { visibilityState: string }, window: EventTarget, lock: () => void, suspend = () => session.suspend()) {
-  const visibility = () => {
-    if (document.visibilityState !== 'hidden') return
-    if (session.verifying) suspend(); else lock()
+export function bindPageLifecycle(session: PageSession, document: EventTarget & { visibilityState: string }, window: EventTarget, lock: () => void, suspend = () => session.suspend(), resume = () => session.resume(), checkSession = () => {}) {
+  const leave = () => { if (session.requireEntryVerification || session.verifying) lock() }
+  const enter = () => {
+    if (session.requireEntryVerification || session.verifying) return
+    resume(); checkSession()
   }
-  const show = (event: Event) => { if ((event as PageTransitionEvent).persisted) lock() }
+  const visibility = () => {
+    if (document.visibilityState === 'hidden') {
+      if (session.verifying) suspend(); else leave()
+    } else if (document.visibilityState === 'visible') enter()
+  }
+  const show = (event: Event) => { if ((event as PageTransitionEvent).persisted) { if (session.requireEntryVerification) lock(); else enter() } }
   document.addEventListener('visibilitychange', visibility)
-  document.addEventListener('freeze', lock)
-  window.addEventListener('pagehide', lock)
+  document.addEventListener('freeze', leave)
+  window.addEventListener('pagehide', leave)
   window.addEventListener('pageshow', show)
   return () => {
     document.removeEventListener('visibilitychange', visibility)
-    document.removeEventListener('freeze', lock)
-    window.removeEventListener('pagehide', lock)
+    document.removeEventListener('freeze', leave)
+    window.removeEventListener('pagehide', leave)
     window.removeEventListener('pageshow', show)
   }
 }

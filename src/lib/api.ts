@@ -13,15 +13,27 @@ function revokePageToken(pageToken: string) {
   void fetch('/api/lock', { method: 'POST', credentials: 'same-origin', keepalive: true,
     headers: { 'Content-Type': 'application/json' }, body }).catch(() => {})
 }
-export function lockSession() {
+function clearSession(cancelConfig: boolean) {
   const previous = pageSession.clear()
-  void queryClient.cancelQueries()
+  void queryClient.cancelQueries({ predicate: query => cancelConfig || query.queryKey[0] !== 'config' })
   queryClient.removeQueries({ predicate: query => query.queryKey[0] !== 'config' })
   queryClient.setQueryData<PublicConfig>(['config'], current => current ? { ...current, authenticated: false, serverUrl: '', legacyInstanceIds: undefined } : current)
   if (previous) revokePageToken(previous)
 }
+export function lockSession() { clearSession(true) }
+export function syncEntryVerification(required: boolean) {
+  pageSession.setRequireEntryVerification(required)
+  queryClient.setQueryData<PublicConfig>(['config'], current => current && current.requireEntryVerification !== required ? { ...current, requireEntryVerification: required } : current)
+  if (required && !pageSession.token && queryClient.getQueryData<PublicConfig>(['config'])?.authenticated) lockSession()
+}
+export async function loadConfig(signal?: AbortSignal) {
+  const config = await api<PublicConfig>('/config', undefined, signal)
+  pageSession.setRequireEntryVerification(config.requireEntryVerification)
+  if (!config.authenticated && (pageSession.token || queryClient.getQueryData<PublicConfig>(['config'])?.authenticated)) clearSession(false)
+  return config
+}
 export function acceptLogin(response: LoginResponse, epoch: number) {
-  if (document.visibilityState !== 'visible') {
+  if (pageSession.requireEntryVerification && document.visibilityState !== 'visible') {
     revokePageToken(response.pageToken)
     throw new DOMException('页面已锁定，请重新验证', 'AbortError')
   }

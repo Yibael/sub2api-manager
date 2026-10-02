@@ -3,7 +3,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from 'node:crypt
 import { z } from 'zod'
 import type { RegistrationResponseJSON, AuthenticationResponseJSON } from '@simplewebauthn/server'
 import { intervalsSchema, spendingRequestSchema, dailySpendingRequestSchema, userRankingsRequestSchema, type PublicConfig } from '../shared/domain'
-import { workspacePreferencesSchema } from '../shared/preferences'
+import { workspacePreferencesPatchSchema } from '../shared/preferences'
 import type { Monitor } from './monitor'
 import { WorkspaceStore, WorkspaceConflict } from './workspace'
 import { Passkeys, PasskeyError } from './passkeys'
@@ -24,7 +24,7 @@ export function createApp(options: AppOptions) {
   const session = (value: unknown) => typeof value === 'string' ? sessions.get(sessionKey(value)) : undefined
   const authenticated = (value: unknown, pageToken: string | null | undefined) => {
     const current = session(value)
-    return !!current && current.expires > Date.now() && !!pageToken && /^[a-f0-9]{64}$/.test(pageToken) && current.pageTokenHash === sessionKey(pageToken)
+    return !!current && current.expires > Date.now() && (!store.requireEntryVerification || (!!pageToken && /^[a-f0-9]{64}$/.test(pageToken) && current.pageTokenHash === sessionKey(pageToken)))
   }
   const pageToken = (request: Request) => request.headers.get('x-page-session')
   const passwordMatches = (password: string) => !!options.password && timingSafeEqual(scryptSync(password, salt, 32), passwordHash)
@@ -57,7 +57,7 @@ export function createApp(options: AppOptions) {
     })
     .get('/config', ({ cookie, request }): PublicConfig => {
       const auth = authenticated(cookie[sessionName].value, pageToken(request))
-      return { configured: !!options.monitor, authenticated: auth, instanceId: store.id, instanceName: options.instanceName,
+      return { configured: !!options.monitor, authenticated: auth, requireEntryVerification: store.requireEntryVerification, instanceId: store.id, instanceName: options.instanceName,
         serverUrl: auth ? options.serverUrl : '', serverTimeZone: options.monitor?.serverTimeZone ?? 'UTC',
         intervals: options.monitor?.intervals ?? store.snapshot().preferences.intervals, passkeyAvailable: passkeys.available(),
         ...(auth ? { legacyInstanceIds: store.legacyInstanceIds } : {}) }
@@ -87,7 +87,8 @@ export function createApp(options: AppOptions) {
       return { pageToken: next.pageToken }
     }, { body: credentialResponse })
     .post('/lock', ({ body, cookie }) => {
-      if (authenticated(cookie[sessionName].value, body.pageToken)) sessions.delete(sessionKey(cookie[sessionName].value as string))
+      // Ignore lifecycle beacons from pages that have not received the shared setting yet.
+      if (store.requireEntryVerification && authenticated(cookie[sessionName].value, body.pageToken)) sessions.delete(sessionKey(cookie[sessionName].value as string))
       return { ok: true }
     }, { body: z.object({ pageToken: z.string().regex(/^[a-f0-9]{64}$/) }) })
     .onBeforeHandle(({ cookie, request, set }) => {
@@ -104,7 +105,7 @@ export function createApp(options: AppOptions) {
       const value = await store.update(body.revision, body.preferences)
       if (options.monitor) options.monitor.intervals = value.preferences.intervals
       return value
-    }, { body: z.object({ revision: z.number().int().nonnegative(), preferences: workspacePreferencesSchema.partial().strict() }) })
+    }, { body: z.object({ revision: z.number().int().nonnegative(), preferences: workspacePreferencesPatchSchema.strict() }) })
     .get('/passkeys', () => ({ items: store.summaries() }))
     .post('/passkeys/register/options', async ({ body, cookie }) => {
       const { options: value, challengeId } = await passkeys.registrationOptions(sessionKey(cookie[sessionName].value as string), body.name)

@@ -5,7 +5,7 @@ import { lockSession, pageSession, queryClient } from '../src/lib/api'
 
 vi.mock('@simplewebauthn/browser', () => ({ startAuthentication: vi.fn(), startRegistration: vi.fn(), browserSupportsWebAuthn: () => true }))
 beforeEach(() => {
-  pageSession.clear(); queryClient.clear(); vi.mocked(startAuthentication).mockReset()
+  pageSession.clear(); pageSession.setRequireEntryVerification(true); queryClient.clear(); vi.mocked(startAuthentication).mockReset()
   vi.stubGlobal('navigator', { sendBeacon: vi.fn(() => true) })
   vi.stubGlobal('document', { visibilityState: 'visible' })
 })

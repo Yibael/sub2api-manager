@@ -12,7 +12,7 @@ import { workspacePreferencesSchema } from '../../shared/preferences'
 import { InstallHelp } from '@/components/pwa'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
-import { FieldGroup, Field, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field'
+import { FieldGroup, Field, FieldContent, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field'
 import { Input } from '@/components/ui/input'
 import { Switch } from '@/components/ui/switch'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectItem } from '@/components/ui/select'
@@ -30,7 +30,14 @@ export function SettingsPage() {
       { to: '/settings/security', icon: Fingerprint, title: '登录与安全' },
       { to: '/settings/preferences', icon: SlidersHorizontal, title: '刷新与统计' },
       { to: '/settings/app', icon: Smartphone, title: '应用与数据' },
-    ].map(item => <Link key={item.to} to={item.to} className="settings-link"><item.icon className="size-5" /><div><h3>{item.title}</h3></div><ChevronRight className="size-4" /></Link>)}</CardContent></Card></> : path.endsWith('/connection') ? <ConnectionSettings /> : path.endsWith('/preferences') ? <><RefreshSettings /><StatisticsSettings /></> : path.endsWith('/security') ? <PasskeySettings /> : <AppSettings />}</div>
+    ].map(item => <Link key={item.to} to={item.to} className="settings-link"><item.icon className="size-5" /><div><h3>{item.title}</h3></div><ChevronRight className="size-4" /></Link>)}</CardContent></Card></> : path.endsWith('/connection') ? <ConnectionSettings /> : path.endsWith('/preferences') ? <><RefreshSettings /><StatisticsSettings /></> : path.endsWith('/security') ? <><EntryVerificationSettings /><PasskeySettings /></> : <AppSettings />}</div>
+}
+function EntryVerificationSettings() {
+  const { preferences, update, isSaving } = useWorkspace()
+  async function change(requireEntryVerification: boolean) {
+    if (await update({ requireEntryVerification })) toast.success('已保存')
+  }
+  return <Card><CardHeader><CardTitle>进入验证</CardTitle></CardHeader><CardContent><FieldGroup><Field orientation="horizontal" data-disabled={isSaving}><FieldContent><FieldLabel htmlFor="entry-verification">进入时验证</FieldLabel><FieldDescription id="entry-verification-description">开启后，打开、刷新或从后台返回时需要验证。关闭后，登录有效时直接进入。此设置同步到所有设备，登录会话最长有效 7 天。</FieldDescription></FieldContent><Switch id="entry-verification" aria-describedby="entry-verification-description" checked={preferences.requireEntryVerification} disabled={isSaving} onCheckedChange={value => { void change(value) }} /></Field></FieldGroup></CardContent></Card>
 }
 function ConnectionSettings() {
   const { config } = useWorkspace(), [checking, setChecking] = useState(false), [error, setError] = useState<string | null>(null)

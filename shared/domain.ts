@@ -46,7 +46,7 @@ export interface Usage { windows: Quota[]; weeklyCost: number | null; estimatedW
 export interface Cycle { start: string; end: string; next: string }
 export interface SpendingRow { accountId: number; cycle: Cycle; today: Sample<number>; spending: Sample<number> }
 export interface LoginResponse { pageToken: string }
-export interface PublicConfig { configured: boolean; authenticated: boolean; instanceId: string; instanceName: string; serverUrl: string; serverTimeZone: string; intervals: Intervals; passkeyAvailable?: boolean; legacyInstanceIds?: string[] }
+export interface PublicConfig { configured: boolean; authenticated: boolean; requireEntryVerification: boolean; instanceId: string; instanceName: string; serverUrl: string; serverTimeZone: string; intervals: Intervals; passkeyAvailable?: boolean; legacyInstanceIds?: string[] }
 
 export function dateInZone(date: Date, timeZone: string): string {
   const parts = new Intl.DateTimeFormat('en-US', { timeZone, year: 'numeric', month: '2-digit', day: '2-digit' }).formatToParts(date)

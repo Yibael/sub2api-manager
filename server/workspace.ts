@@ -39,6 +39,7 @@ export class WorkspaceStore {
   get id() { return this.state.id }
   get userHandle() { return this.state.userHandle }
   get legacyInstanceIds() { return [...this.state.legacyInstanceIds] }
+  get requireEntryVerification() { return this.state.preferences.requireEntryVerification }
   snapshot(): WorkspaceSnapshot { return structuredClone({ revision: this.state.revision, initialized: this.state.initialized, preferences: this.state.preferences }) }
   credentials() { return structuredClone(this.state.passkeys) }
   summaries(): PasskeySummary[] { return this.state.passkeys.map(({ id, name, rpId, createdAt, lastUsedAt }) => ({ id, name, rpId, createdAt, lastUsedAt })) }

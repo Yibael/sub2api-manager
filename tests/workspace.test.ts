@@ -12,7 +12,7 @@ describe('persistent workspace', () => {
       await writeFile(join(directory, 'intervals.json'), JSON.stringify({ status: 10, quota: 60, spending: 30 }))
       const path = join(directory, 'workspace.json')
       const store = await WorkspaceStore.open(path, 'Asia/Shanghai', 'old-admin-key-id')
-      await store.update(0, { pins: [2, 1], subscriptions: [{ accountId: 1, price: 120, renewalDay: 31 }], actualCurrency: '¥' })
+      await store.update(0, { pins: [2, 1], subscriptions: [{ accountId: 1, price: 120, renewalDay: 31 }], actualCurrency: '¥', requireEntryVerification: false })
       await store.addPasskey({ id: 'credential', name: 'Laptop', rpId: 'manager.example', publicKey: 'public-key', counter: 0, transports: ['internal'], deviceType: 'multiDevice', backedUp: true, createdAt: 1, lastUsedAt: null })
       const reopened = await WorkspaceStore.open(path, 'UTC', 'rotated-admin-key-id')
       expect(reopened.id).toBe(store.id)
@@ -21,8 +21,23 @@ describe('persistent workspace', () => {
       expect(reopened.credentials()).toEqual(store.credentials())
       expect(reopened.legacyInstanceIds).toEqual(['old-admin-key-id'])
       expect(reopened.snapshot().preferences.intervals.quota).toBe(60)
+      expect(reopened.requireEntryVerification).toBe(false)
       expect((await stat(path)).mode & 0o777).toBe(0o600)
       expect(JSON.parse(await readFile(path, 'utf8'))).not.toHaveProperty('password')
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
+  it('defaults existing workspace files to entry verification without losing their settings', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'sub2api-workspace-test-'))
+    try {
+      const path = join(directory, 'workspace.json'), store = await WorkspaceStore.open(path, 'Asia/Shanghai', 'legacy-id')
+      await store.update(0, { pins: [2, 1] })
+      const previous = JSON.parse(await readFile(path, 'utf8'))
+      delete previous.preferences.requireEntryVerification
+      await writeFile(path, JSON.stringify(previous))
+      const reopened = await WorkspaceStore.open(path, 'UTC', 'legacy-id')
+      expect(reopened.requireEntryVerification).toBe(true)
+      expect(reopened.snapshot().preferences.pins).toEqual([2, 1])
+      expect(reopened.snapshot().revision).toBe(1)
     } finally { await rm(directory, { recursive: true, force: true }) }
   })
   it('serializes concurrent writes and rejects stale revisions without losing the winning change', async () => {

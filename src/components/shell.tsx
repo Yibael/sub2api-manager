@@ -3,7 +3,7 @@ import { flushSync } from 'react-dom'
 import { Link, Outlet, useRouterState } from '@tanstack/react-router'
 import { useQuery } from '@tanstack/react-query'
 import { LayoutDashboard, Layers, ChartNoAxesCombined, Settings2, Download } from 'lucide-react'
-import { api, queryClient, lockSession } from '@/lib/api'
+import { loadConfig, queryClient, lockSession } from '@/lib/api'
 import { pageSession, bindPageLifecycle } from '@/lib/page-session'
 import { PreferencesMigration } from '@/components/preferences-migration'
 import { PreferencesProvider, useWorkspace } from '@/lib/preferences'
@@ -13,17 +13,16 @@ import { Button } from '@/components/ui/button'
 import { LoadingValue, LoginSkeleton, RouteSkeleton, StableRegion } from '@/components/loading'
 import { Toaster } from '@/components/ui/sonner'
 import { SetupPage } from '@/pages/setup'
-import type { PublicConfig } from '../../shared/domain'
 
 const navigation = [{ to: '/', label: '概览', icon: LayoutDashboard }, { to: '/accounts', label: '账号', icon: Layers }, { to: '/statistics', label: '统计', icon: ChartNoAxesCombined }, { to: '/settings', label: '设置', icon: Settings2 }] as const
 export function Root() {
-  const config = useQuery({ queryKey: ['config'], queryFn: ({ signal }) => api<PublicConfig>('/config', undefined, signal), staleTime: 60_000 })
+  const config = useQuery({ queryKey: ['config'], queryFn: ({ signal }) => loadConfig(signal), staleTime: 60_000 })
   useSyncExternalStore(pageSession.subscribe, pageSession.getSnapshot, pageSession.getSnapshot)
-  useEffect(() => bindPageLifecycle(pageSession, document, window, () => flushSync(() => lockSession()), () => flushSync(() => pageSession.suspend())), [])
+  useEffect(() => bindPageLifecycle(pageSession, document, window, () => flushSync(() => lockSession()), () => flushSync(() => pageSession.suspend()), () => flushSync(() => pageSession.resume()), () => { void queryClient.invalidateQueries({ queryKey: ['config'] }) }), [])
   if (!config.data) return <main className="setup-screen"><div className="setup-panel"><Brand />{config.error ? <><ErrorNotice message={config.error.message} /><Button onClick={() => void config.refetch()}>重试连接</Button></> : <LoginSkeleton />}</div></main>
   // Keep the login form mounted while its system credential sheet is open so
   // cancellation retains the automatic-prompt guard and the password fallback.
-  if (!config.data.configured || !config.data.authenticated || !pageSession.token) return <SetupPage config={config.data} />
+  if (!config.data.configured || !config.data.authenticated || (config.data.requireEntryVerification && !pageSession.token)) return <SetupPage config={config.data} />
   if (pageSession.suspended) return <main className="setup-screen"><div className="setup-panel"><Brand /><LoginSkeleton /></div></main>
   return <PreferencesProvider key={config.data.instanceId} config={config.data} fallback={(error, retry) => <AppFrame>{error ? <div className="page-stack"><ErrorNotice message={error} /><Button variant="outline" onClick={retry}>重试</Button></div> : <RouteSkeleton />}</AppFrame>}><Shell /><Toaster position="top-center" richColors /></PreferencesProvider>
 }

@@ -4,12 +4,13 @@ import { createApp } from '../server/app'
 import { WorkspaceStore } from '../server/workspace'
 const token = 'a'.repeat(64)
 afterEach(() => vi.useRealTimers())
-function lifecycle() {
+function lifecycle(requireEntryVerification = true) {
   const session = new PageSession(), document = Object.assign(new EventTarget(), { visibilityState: 'visible' }), window = new EventTarget()
+  session.setRequireEntryVerification(requireEntryVerification)
   const lock = vi.fn(() => { session.clear() })
-  const cleanup = bindPageLifecycle(session, document, window, lock)
+  const checkSession = vi.fn(), cleanup = bindPageLifecycle(session, document, window, lock, undefined, undefined, checkSession)
   session.activate(token, session.epoch)
-  return { session, document, window, lock, cleanup }
+  return { session, document, window, lock, checkSession, cleanup }
 }
 describe('page verification lifecycle', () => {
   it('remains unlocked through long foreground use, navigation and ordinary focus changes', () => {
@@ -70,17 +71,45 @@ describe('page verification lifecycle', () => {
     expect(session.unlocked).toBe(false)
     cleanup()
   })
+  it('keeps a login through background, freeze, page close and history restoration when entry verification is disabled', () => {
+    const { session, document, window, lock, checkSession, cleanup } = lifecycle(false), epoch = session.epoch
+    document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange'))
+    document.dispatchEvent(new Event('freeze')); window.dispatchEvent(new Event('pagehide'))
+    expect(session.unlocked).toBe(true); expect(session.epoch).toBe(epoch); expect(lock).not.toHaveBeenCalled()
+    document.visibilityState = 'visible'; document.dispatchEvent(new Event('visibilitychange'))
+    window.dispatchEvent(Object.assign(new Event('pageshow'), { persisted: true }))
+    expect(checkSession).toHaveBeenCalledTimes(2); expect(session.token).toBe(token)
+    cleanup()
+    document.dispatchEvent(new Event('visibilitychange'))
+    expect(checkSession).toHaveBeenCalledTimes(2)
+  })
+  it('uses a newly synchronized setting on the next background transition', () => {
+    const { session, document, lock, cleanup } = lifecycle(false)
+    session.setRequireEntryVerification(true)
+    document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange'))
+    expect(session.token).toBe(null); expect(lock).toHaveBeenCalledOnce()
+    cleanup()
+  })
+  it('preserves an existing login after cancelling a hidden Passkey sheet with entry verification disabled', () => {
+    const { session, document, lock, cleanup } = lifecycle(false), flow = session.beginVerification()
+    document.visibilityState = 'hidden'; document.dispatchEvent(new Event('visibilitychange'))
+    expect(session.suspended).toBe(true)
+    expect(flow.finish(false, false)).toBe(false)
+    document.visibilityState = 'visible'; document.dispatchEvent(new Event('visibilitychange'))
+    expect(session.unlocked).toBe(true); expect(lock).not.toHaveBeenCalled()
+    cleanup()
+  })
 })
 describe('server page verification', () => {
   function setup() {
     const origin = 'https://manager.example', store = WorkspaceStore.memory()
     const app = createApp({ workspace: store, monitor: null, password: 'test-password-long-enough', origin, secureCookie: true, serverUrl: '', instanceName: 'test', instanceId: store.id, saveIntervals: async () => {} }).compile()
-    const call = (path: string, body?: unknown, cookie = '', pageToken = '') => app.handle(new Request(`${origin}/api${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { origin, cookie, 'x-page-session': pageToken, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }))
+    const call = (path: string, body?: unknown, cookie = '', pageToken = '', method = 'POST') => app.handle(new Request(`${origin}/api${path}`, { method: body === undefined ? 'GET' : method, headers: { origin, cookie, 'x-page-session': pageToken, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }))
     async function login(cookie = '') {
       const response = await call('/login', { password: 'test-password-long-enough' }, cookie)
       return { cookie: response.headers.getSetCookie().find(value => value.startsWith('sub2manager_session='))!.split(';')[0], pageToken: (await response.json()).pageToken }
     }
-    return { call, login }
+    return { call, login, store, app, origin }
   }
   it('requires both the protected Cookie and matching in-memory page token', async () => {
     const { call, login } = setup(), session = await login()
@@ -99,5 +128,47 @@ describe('server page verification', () => {
     const reopened = await login(current.cookie)
     expect(reopened.pageToken).not.toBe(current.pageToken)
     expect((await call('/workspace', undefined, reopened.cookie, reopened.pageToken)).status).toBe(200)
+  })
+  it('synchronizes entry verification across devices, resumes by Cookie, and ignores stale lifecycle locks', async () => {
+    const { call, login } = setup(), first = await login(), second = await login()
+    const saved = await call('/workspace', { revision: 0, preferences: { requireEntryVerification: false } }, first.cookie, first.pageToken, 'PATCH')
+    expect(saved.status).toBe(200)
+    expect((await (await call('/workspace', undefined, second.cookie)).json()).preferences.requireEntryVerification).toBe(false)
+    const reopened = await (await call('/config', undefined, first.cookie)).json()
+    expect(reopened).toMatchObject({ authenticated: true, requireEntryVerification: false })
+    await call('/lock', { pageToken: first.pageToken }, first.cookie)
+    expect((await call('/workspace', undefined, first.cookie)).status).toBe(200)
+    expect((await call('/workspace')).status).toBe(401)
+    expect((await call('/workspace', undefined, 'sub2manager_session=invalid')).status).toBe(401)
+    expect((await (await call('/config')).json()).authenticated).toBe(false)
+    const unrelated = await call('/workspace', { revision: 1, preferences: { pins: [1] } }, second.cookie, '', 'PATCH')
+    expect(unrelated.status).toBe(200)
+    expect((await unrelated.json()).preferences.requireEntryVerification).toBe(false)
+    const enabled = await call('/workspace', { revision: 2, preferences: { requireEntryVerification: true } }, second.cookie, '', 'PATCH')
+    expect(enabled.status).toBe(200)
+    expect((await call('/workspace', undefined, first.cookie)).status).toBe(401)
+    expect((await (await call('/config', undefined, first.cookie)).json()).requireEntryVerification).toBe(true)
+    expect((await call('/workspace', undefined, first.cookie, first.pageToken)).status).toBe(200)
+  })
+  it('retains the seven-day expiration and explicit logout when entry verification is disabled', async () => {
+    vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-02T00:00:00Z'))
+    const { call, login, store } = setup()
+    await store.update(0, { requireEntryVerification: false })
+    const current = await login(), other = await login(), issuedAt = Date.now()
+    vi.setSystemTime(issuedAt + 7 * 86400000 - 1)
+    expect((await call('/workspace', undefined, current.cookie)).status).toBe(200)
+    expect((await call('/logout', {}, other.cookie)).status).toBe(200)
+    expect((await call('/workspace', undefined, other.cookie)).status).toBe(401)
+    vi.setSystemTime(issuedAt + 7 * 86400000)
+    expect((await call('/workspace', undefined, current.cookie)).status).toBe(401)
+    expect((await (await call('/config', undefined, current.cookie)).json()).authenticated).toBe(false)
+  })
+  it('does not restore a login after the server restarts even though the shared setting persists', async () => {
+    const { login, store, origin } = setup()
+    await store.update(0, { requireEntryVerification: false })
+    const current = await login()
+    const restarted = createApp({ workspace: store, monitor: null, password: 'test-password-long-enough', origin, secureCookie: true, serverUrl: '', instanceName: 'test', instanceId: store.id, saveIntervals: async () => {} }).compile()
+    const response = await restarted.handle(new Request(`${origin}/api/config`, { headers: { cookie: current.cookie } }))
+    expect(await response.json()).toMatchObject({ authenticated: false, requireEntryVerification: false })
   })
 })

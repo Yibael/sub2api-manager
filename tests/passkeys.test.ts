@@ -56,8 +56,9 @@ describe('real WebAuthn verification', () => {
   })
 })
 describe('Passkey HTTP boundary', () => {
-  it('requires page verification, permits management after five minutes, and logs in with a real Passkey', async () => {
+  it.each([true, false])('verifies real Passkey login, management and session revocation (entry verification: %s)', async requireEntryVerification => {
     const store = WorkspaceStore.memory(), app = createApp({ workspace: store, monitor: null, password: 'test-password-long-enough', origin, secureCookie: true, serverUrl: '', instanceName: 'test', instanceId: store.id, saveIntervals: async () => {} }).compile()
+    if (!requireEntryVerification) await store.update(0, { requireEntryVerification: false })
     const call = (path: string, body?: unknown, cookie = '', requestOrigin = origin, pageToken = '') => app.handle(new Request(`${origin}/api${path}`, { method: body === undefined ? 'GET' : 'POST', headers: { origin: requestOrigin, cookie, 'x-page-session': pageToken, 'Content-Type': 'application/json' }, body: body === undefined ? undefined : JSON.stringify(body) }))
     expect((await call('/passkeys')).status).toBe(401)
     expect((await call('/passkeys/register/options', { name: 'test' })).status).toBe(401)
@@ -78,10 +79,12 @@ describe('Passkey HTTP boundary', () => {
     const cookies = signedIn.headers.getSetCookie()
     const newSession = cookies.find(value => value.startsWith('sub2manager_session='))!.split(';')[0], newPageToken = (await signedIn.json()).pageToken
     expect((await (await call('/config', undefined, newSession, origin, newPageToken)).json()).authenticated).toBe(true)
+    expect((await (await call('/config', undefined, newSession)).json()).authenticated).toBe(!requireEntryVerification)
     vi.useFakeTimers(); vi.setSystemTime(Date.now() + 5 * 60_000 + 1)
     expect((await call('/passkeys/rename', { id: device.id, name: 'New name' }, newSession, origin, newPageToken)).status).toBe(200)
     expect((await call('/passkeys/remove', { id: device.id }, newSession, origin, newPageToken)).status).toBe(200)
     expect((await (await call('/config', undefined, newSession, origin, newPageToken)).json()).authenticated).toBe(false)
+    expect((await (await call('/config', undefined, newSession)).json()).authenticated).toBe(false)
     expect((await (await call('/config')).json()).passkeyAvailable).toBe(false)
   })
 })

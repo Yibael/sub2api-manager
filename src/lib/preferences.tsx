@@ -4,7 +4,7 @@ import { useQuery } from '@tanstack/react-query'
 import { toast } from 'sonner'
 import { preferencesSchema, localPreferencesSchema, workspacePreferencesSchema, type Preferences, type WorkspacePreferences, type WorkspaceSnapshot } from '../../shared/preferences'
 import type { PublicConfig } from '../../shared/domain'
-import { api, ApiError, queryClient } from './api'
+import { api, ApiError, queryClient, syncEntryVerification } from './api'
 import { refreshDelay } from './completion-query'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Button } from '@/components/ui/button'
@@ -37,6 +37,9 @@ export function PreferencesProvider({ config, children, fallback }: { config: Pu
   const { refetch, fetchStatus, dataUpdatedAt, errorUpdatedAt } = workspace
   const current = () => queryClient.getQueryData<WorkspaceSnapshot>(key)
   useEffect(() => {
+    if (workspace.data) syncEntryVerification(workspace.data.preferences.requireEntryVerification)
+  }, [workspace.data])
+  useEffect(() => {
     const change = () => {
       const active = document.visibilityState === 'visible'
       setVisible(active)
@@ -66,6 +69,7 @@ export function PreferencesProvider({ config, children, fallback }: { config: Pu
         if (!current()) throw new Error('正在读取配置，请稍后重试')
         const next = await api<WorkspaceSnapshot>('/workspace', { revision, preferences: shared }, undefined, 'PATCH')
         queryClient.setQueryData<WorkspaceSnapshot>(key, previous => previous && previous.revision > next.revision ? previous : next)
+        syncEntryVerification(current()!.preferences.requireEntryVerification)
       }
       if ('theme' in change || 'hideAmounts' in change) {
         const next = localPreferencesSchema.parse({ ...local, ...change })
@@ -80,7 +84,7 @@ export function PreferencesProvider({ config, children, fallback }: { config: Pu
   }
   if (!workspace.data) return <ThemeProvider attribute="class" forcedTheme={local.theme === 'system' ? undefined : local.theme} defaultTheme="system" enableSystem>{fallback ? fallback(workspace.error?.message, () => { void refetch() }) : <main className="loading-screen">{workspace.error ? <Alert variant="destructive"><AlertTitle>无法读取配置</AlertTitle><AlertDescription>{workspace.error.message}<Button variant="outline" onClick={() => void refetch()}>重试</Button></AlertDescription></Alert> : <Skeleton className="h-40 w-full max-w-sm" />}</main>}</ThemeProvider>
   const preferences: Preferences = { ...workspace.data.preferences, ...local }
-  const sharedConfig = { ...config, intervals: workspace.data.preferences.intervals }
+  const sharedConfig = { ...config, intervals: workspace.data.preferences.intervals, requireEntryVerification: workspace.data.preferences.requireEntryVerification }
   return <Context.Provider value={{ preferences, config: sharedConfig, update, revision: workspace.data.revision, getRevision: () => current()?.revision ?? workspace.data!.revision, getPreferences: () => current()?.preferences ?? workspace.data!.preferences, isSaving: saving > 0, legacy: bootstrap.legacy, migrationPending: !workspace.data.initialized && !!bootstrap.legacy }}><ThemeProvider attribute="class" forcedTheme={local.theme === 'system' ? undefined : local.theme} defaultTheme="system" enableSystem>{children}</ThemeProvider></Context.Provider>
 }
 export function useWorkspace() {

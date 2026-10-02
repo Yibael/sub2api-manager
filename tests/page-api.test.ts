@@ -1,8 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest'
-import { api, lockSession, pageSession, queryClient } from '../src/lib/api'
+import { api, loadConfig, lockSession, loginWithPassword, pageSession, queryClient, syncEntryVerification } from '../src/lib/api'
 
 beforeEach(() => {
-  pageSession.clear(); queryClient.clear()
+  pageSession.clear(); pageSession.setRequireEntryVerification(true); queryClient.clear()
   vi.stubGlobal('navigator', { sendBeacon: vi.fn(() => true) })
   vi.stubGlobal('document', { visibilityState: 'visible' })
 })
@@ -42,5 +42,49 @@ describe('locked API responses', () => {
     await expect(pending).rejects.toMatchObject({ name: 'AbortError' })
     expect(pageSession.unlocked).toBe(false)
     expect(navigator.sendBeacon).toHaveBeenCalledOnce()
+  })
+  it('loads the shared setting and uses the existing Cookie without storing a page token for a reopened page', async () => {
+    const fetch = vi.fn(async (_url: string, _init?: RequestInit) => Response.json({ configured: true, authenticated: true, requireEntryVerification: false }))
+    vi.stubGlobal('fetch', fetch)
+    const config = await loadConfig()
+    expect(config.authenticated).toBe(true); expect(pageSession.requireEntryVerification).toBe(false)
+    expect(pageSession.token).toBe(null)
+    expect(fetch.mock.calls[0][1]).toMatchObject({ credentials: 'same-origin', cache: 'no-store' })
+    expect(fetch.mock.calls[0][1]?.headers).not.toHaveProperty('x-page-session')
+  })
+  it('clears resumed data when a synchronized setting requires verification again', () => {
+    queryClient.setQueryData(['config'], { authenticated: true, requireEntryVerification: false, serverUrl: 'private-origin' })
+    queryClient.setQueryData(['workspace', 'test'], { private: true })
+    syncEntryVerification(true)
+    expect(pageSession.requireEntryVerification).toBe(true)
+    expect(queryClient.getQueryData(['config'])).toMatchObject({ authenticated: false, requireEntryVerification: true, serverUrl: '' })
+    expect(queryClient.getQueryData(['workspace', 'test'])).toBeUndefined()
+    expect(navigator.sendBeacon).not.toHaveBeenCalled()
+  })
+  it('clears resumed data on an expired Cookie response', async () => {
+    syncEntryVerification(false)
+    queryClient.setQueryData(['config'], { authenticated: true, requireEntryVerification: false, serverUrl: 'private-origin' })
+    queryClient.setQueryData(['workspace', 'test'], { private: true })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ error: '请先登录' }, { status: 401 })))
+    await expect(api('/workspace')).rejects.toMatchObject({ status: 401 })
+    expect(queryClient.getQueryData(['workspace', 'test'])).toBeUndefined()
+    expect(queryClient.getQueryData(['config'])).toMatchObject({ authenticated: false })
+  })
+  it('finishes a config check after expiration and clears data before showing the login page', async () => {
+    queryClient.setQueryData(['config'], { authenticated: true, requireEntryVerification: false })
+    queryClient.setQueryData(['workspace', 'test'], { private: true })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ authenticated: false, requireEntryVerification: false })))
+    const config = await queryClient.fetchQuery({ queryKey: ['config'], queryFn: ({ signal }) => loadConfig(signal) })
+    expect(config.authenticated).toBe(false)
+    expect(queryClient.getQueryData(['workspace', 'test'])).toBeUndefined()
+    expect(queryClient.getQueryData(['config'])).toMatchObject({ authenticated: false, requireEntryVerification: false })
+  })
+  it('accepts a requested password login completing in the background when entry verification is disabled', async () => {
+    syncEntryVerification(false)
+    vi.stubGlobal('document', { visibilityState: 'hidden' })
+    vi.stubGlobal('fetch', vi.fn(async () => Response.json({ pageToken: 'a'.repeat(64) })))
+    await loginWithPassword('test-password')
+    expect(pageSession.token).toBe('a'.repeat(64))
+    expect(navigator.sendBeacon).not.toHaveBeenCalled()
   })
 })
