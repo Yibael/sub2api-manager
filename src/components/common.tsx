@@ -18,14 +18,16 @@ import { useWorkspace } from '@/lib/preferences'
 import { cn } from '@/lib/utils'
 import { formatQuotaCountdown } from '@/lib/quota-countdown'
 import { type Quota } from '../../shared/domain'
+import { formatMoney, type MoneyInput } from '../../shared/money'
 import type { MonitorData } from '@/lib/monitor'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return <div className="flex items-center gap-3"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>{!compact && <span className="brand-name">sub2api <span className="text-muted-foreground">manager</span></span>}</div>
 }
-export function Money({ value, currency = '$', loading = false }: { value: number | null | undefined; currency?: string; loading?: boolean }) {
+export function Money({ value, currency = '$', loading = false }: { value: MoneyInput | null | undefined; currency?: string; loading?: boolean }) {
   const { preferences } = useWorkspace()
-  return <span className="tabular-nums"><LoadingValue loading={loading}>{preferences.hideAmounts ? '••••' : value === null || value === undefined ? '—' : `${currency}${value.toLocaleString('en-US', { minimumFractionDigits: 2, maximumFractionDigits: 2 })}`}</LoadingValue></span>
+  const amount = formatMoney(value)
+  return <span className="tabular-nums"><LoadingValue loading={loading}>{preferences.hideAmounts ? '••••' : amount === null ? '—' : currency + amount}</LoadingValue></span>
 }
 const providerIcons: Record<string, string> = { openai: openaiIcon, anthropic: claudeIcon, gemini: geminiIcon, antigravity: antigravityIcon, grok: grokIcon }
 export function ProviderMark({ platform }: { platform: string }) {
@@ -66,7 +68,7 @@ export function NoPins() {
 export function Metric({ label, value, icon, loading = false }: { label: string; value: ReactNode; icon: ReactNode; loading?: boolean }) {
   return <Card className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent><div className="metric-value"><LoadingValue loading={loading}>{value}</LoadingValue></div></CardContent></Card>
 }
-export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: number; estimatedCost?: number | null }) {
+export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: number; estimatedCost?: MoneyInput | null }) {
   const reset = formatQuotaCountdown(quota.resetsAt, now)
   return <div className={cn('quota-row', quota.percent !== null && quota.percent >= 90 && 'quota-warning')}>
     <div className="flex items-center justify-between gap-3"><span>{quota.name}</span><span className="quota-number">{quota.percent === null ? '未知' : `${quota.percent.toFixed(0)}%`}</span></div>
@@ -79,7 +81,7 @@ export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: num
   </div>
 }
 export function QuotaList({ quotas, pending, empty, now, estimatedCost, limit }: {
-  quotas: Quota[]; pending: boolean; empty: string; now: number; estimatedCost?: number | null; limit?: number;
+  quotas: Quota[]; pending: boolean; empty: string; now: number; estimatedCost?: MoneyInput | null; limit?: number;
 }) {
   return <StableRegion busy={pending} phase={pending ? 'pending' : 'ready'}><div className="quota-list">
     {pending ? <><QuotaSkeleton /><QuotaSkeleton /><span className="sr-only" role="status">正在读取额度</span></> : quotas.length ? (limit ? quotas.slice(0, limit) : quotas).map(q => <QuotaRow key={q.name} quota={q} now={now} estimatedCost={q.name === '7日额度' ? estimatedCost : undefined} />) : <p className="quota-empty">{empty}</p>}

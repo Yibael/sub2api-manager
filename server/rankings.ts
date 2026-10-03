@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js'
+import { MoneyDecimal, normalizeMoney } from '../shared/money'
 import { userRankingPeriod, rankingInterval, type Intervals, type Sample, type UserRanking, type UserRankingsRequest, type UserSpendingRank } from '../shared/domain'
 import { DemandCache } from './cache'
 import { object } from './normalize'
@@ -13,29 +13,28 @@ function count(value: unknown, positive = false): number {
   if (typeof value !== 'number' || !Number.isSafeInteger(value) || value < (positive ? 1 : 0)) throw new Error('用户统计数据格式不兼容')
   return value
 }
-function parseAmount(value: unknown): Decimal {
+function parseAmount(value: unknown) {
   if (typeof value !== 'number' && typeof value !== 'string') throw new Error('用户消费数据缺失')
-  let amount: Decimal
-  try { amount = new Decimal(value) } catch { throw new Error('用户消费格式无效') }
-  if (!amount.isFinite() || amount.isNegative() || !Number.isFinite(amount.toNumber())) throw new Error('用户消费数据无效')
-  return amount
+  const amount = normalizeMoney(value)
+  if (amount === null) throw new Error('用户消费数据无效')
+  return new MoneyDecimal(amount)
 }
 function rankRow(value: unknown): UserSpendingRank {
   const row = object(value)
   const userId = count(row.user_id, true)
   const name = [row.username, row.email].find(value => typeof value === 'string' && value.trim())
-  return { userId, name: typeof name === 'string' ? name.trim().slice(0, 200) : `用户 #${userId}`, amount: parseAmount(row.actual_cost).toNumber(), requests: count(row.requests), tokens: count(row.tokens) }
+  return { userId, name: typeof name === 'string' ? name.trim().slice(0, 200) : `用户 #${userId}`, amount: parseAmount(row.actual_cost).toString(), requests: count(row.requests), tokens: count(row.tokens) }
 }
-function sum(rows: UserSpendingRank[]) { return rows.reduce((total, row) => total.plus(row.amount), new Decimal(0)) }
+function sum(rows: UserSpendingRank[]) { return rows.reduce((total, row) => total.plus(row.amount), new MoneyDecimal(0)) }
 function sorted(rows: UserSpendingRank[]) {
-  return [...rows].sort((a, b) => b.amount - a.amount || b.tokens - a.tokens || a.userId - b.userId).slice(0, rankingLimit)
+  return [...rows].sort((a, b) => new MoneyDecimal(b.amount).cmp(a.amount) || b.tokens - a.tokens || a.userId - b.userId).slice(0, rankingLimit)
 }
 function combine(rows: UserSpendingRank[]): UserSpendingRank[] {
   const users = new Map<number, UserSpendingRank>()
   for (const row of rows) {
     const previous = users.get(row.userId)
-    const amount = previous ? new Decimal(previous.amount).plus(row.amount).toNumber() : row.amount
-    if (!Number.isFinite(amount)) throw new Error('用户消费总计无效')
+    const amount = previous ? new MoneyDecimal(previous.amount).plus(row.amount).toString() : row.amount
+    if (normalizeMoney(amount) === null) throw new Error('用户消费总计无效')
     users.set(row.userId, previous ? { ...row, amount,
       requests: count(previous.requests + row.requests), tokens: count(previous.tokens + row.tokens) } : row)
   }
@@ -90,7 +89,7 @@ export class Rankings {
     }
     const sample = await this.projectionCache.get(JSON.stringify([input.range, period.period, timeZone, input.includeAdmin]), 0, async () => {
       const admin = await excluded()
-      let rows: UserSpendingRank[], total: Decimal, updatedAt: number
+      let rows: UserSpendingRank[], total: InstanceType<typeof MoneyDecimal>, updatedAt: number
       if (input.range !== 'hour') {
         const ranking = await this.rankingCache.get(JSON.stringify([startDate, endDate, timeZone]), rankingInterval(this.intervals()) * 1000, async () => {
           const raw = object(await this.upstream.request('dashboard/users-ranking', { signal, query: {
@@ -105,7 +104,7 @@ export class Rankings {
         const aggregate = ranking.data
         rows = aggregate.rows.filter(row => !admin.ids.has(row.userId))
         updatedAt = ranking.updatedAt!
-        total = new Decimal(aggregate.totalAmount)
+        total = new MoneyDecimal(aggregate.totalAmount)
         if (aggregate.rows.length === 50 && rows.length < rankingLimit) {
           // More than 38 Admins in the upstream top 50 can hide eligible users.
           // Fall back to complete daily aggregates, without reading usage logs.
@@ -140,8 +139,9 @@ export class Rankings {
         total = sum(rows)
         updatedAt = trend.updatedAt!
       }
-      if (total.isNegative() || !Number.isFinite(total.toNumber())) throw new Error('总消费统计口径不一致，请稍后重试')
-      return { ranking: { ...period, range: input.range, rows: sorted(rows), totalAmount: total.toNumber() }, updatedAt: Math.min(updatedAt, admin.updatedAt) }
+      const totalAmount = normalizeMoney(total.toString())
+      if (totalAmount === null) throw new Error('总消费统计口径不一致，请稍后重试')
+      return { ranking: { ...period, range: input.range, rows: sorted(rows), totalAmount }, updatedAt: Math.min(updatedAt, admin.updatedAt) }
     }, force)
     return { data: sample.data?.ranking ?? null, updatedAt: sample.data?.updatedAt ?? null, error: sample.error }
   }

@@ -1,4 +1,5 @@
 import { z } from 'zod'
+import { MoneyDecimal, normalizeMoney, type MoneyAmount } from './money'
 
 export const intervalsSchema = z.object({
   status: z.union([z.literal(2), z.literal(5), z.literal(10), z.literal(15), z.literal(30)]),
@@ -11,13 +12,18 @@ export const timezoneSchema = z.string().max(80).refine(value => {
   try { new Intl.DateTimeFormat('en', { timeZone: value }); return true } catch { return false }
 }, '请输入有效的 IANA 时区，例如 Asia/Shanghai')
 export const subscriptionSchema = z.object({
-  accountId: z.number().int().positive(), price: z.number().finite().min(0).max(1e9), renewalDay: z.number().int().min(1).max(31),
+  accountId: z.number().int().positive(),
+  price: z.union([z.number(), z.string().trim().min(1).max(200)]).refine(value => {
+    const amount = normalizeMoney(value)
+    return amount !== null && new MoneyDecimal(amount).lte(1e9)
+  }, '价格应为不超过 1000000000 的非负数字').transform(value => normalizeMoney(value)!),
+  renewalDay: z.number().int().min(1).max(31),
 })
 export type Subscription = z.infer<typeof subscriptionSchema>
 export const spendingRequestSchema = z.object({
   subscriptions: z.array(subscriptionSchema).max(100), timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
 }).refine(value => new Set(value.subscriptions.map(s => s.accountId)).size === value.subscriptions.length, '账号不能重复')
-export type SpendingRequest = z.infer<typeof spendingRequestSchema>
+export type SpendingRequest = z.input<typeof spendingRequestSchema>
 export const dailySpendingRequestSchema = z.object({
   ids: z.array(z.number().int().positive()).max(100).transform(ids => [...new Set(ids)]),
   timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
@@ -29,22 +35,22 @@ export const userRankingsRequestSchema = z.object({
   range: rankingRangeSchema, timeZone: timezoneSchema, includeAdmin: z.boolean(), force: z.boolean().optional(),
 })
 export type UserRankingsRequest = z.infer<typeof userRankingsRequestSchema>
-export interface UserSpendingRank { userId: number; name: string; amount: number; requests: number; tokens: number }
+export interface UserSpendingRank { userId: number; name: string; amount: MoneyAmount; requests: number; tokens: number }
 export interface RankingPeriod { period: string; startDate: string; endDate: string; timeZone: string }
-export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[]; totalAmount: number }
+export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[]; totalAmount: MoneyAmount }
 export function rankingInterval(intervals: Intervals) { return Math.max(30, intervals.spending) }
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
-export interface Quota { name: string; percent: number | null; used: number | null; limit: number | null; resetsAt: string | null }
+export interface Quota { name: string; percent: number | null; used: MoneyAmount | null; limit: MoneyAmount | null; resetsAt: string | null }
 export interface Account {
   id: number; name: string; platform: string; type: string; status: string;
   schedulable: boolean | null; concurrency: number | null; currentConcurrency: number | null;
   rateLimitResetAt: string | null; overloadUntil: string | null; tempUnschedulableUntil: string | null;
   supportsUsage: boolean; localQuotas: Quota[];
 }
-export interface TodayStats { standardCost: number | null; accountCost: number | null; userCost: number | null; requests: number | null; tokens: number | null }
-export interface Usage { windows: Quota[]; weeklyCost: number | null; estimatedWeeklyCost: number | null }
+export interface TodayStats { standardCost: MoneyAmount | null; accountCost: MoneyAmount | null; userCost: MoneyAmount | null; requests: number | null; tokens: number | null }
+export interface Usage { windows: Quota[]; weeklyCost: MoneyAmount | null; estimatedWeeklyCost: MoneyAmount | null }
 export interface Cycle { start: string; end: string; next: string }
-export interface SpendingRow { accountId: number; cycle: Cycle; today: Sample<number>; spending: Sample<number> }
+export interface SpendingRow { accountId: number; cycle: Cycle; today: Sample<MoneyAmount>; spending: Sample<MoneyAmount> }
 export interface LoginResponse { pageToken: string }
 export interface PublicConfig { configured: boolean; authenticated: boolean; requireEntryVerification: boolean; instanceId: string; instanceName: string; serverUrl: string; serverTimeZone: string; intervals: Intervals; passkeyAvailable?: boolean; legacyInstanceIds?: string[] }
 

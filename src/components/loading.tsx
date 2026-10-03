@@ -67,8 +67,9 @@ export function LoginSkeleton() {
 export function RankingSkeletonRows({ count = 6 }: { count?: number }) {
   return <>{Array.from({ length: count }, (_, index) => <TableRow key={index} className="ranking-row" aria-hidden="true">
     <TableCell><Skeleton className="h-4 w-4" /></TableCell>
-    <TableCell><Skeleton className="h-4 w-24 max-w-full" /><Skeleton className="mt-2 h-3 w-16 sm:hidden" /></TableCell>
+    <TableCell><Skeleton className="h-4 w-24 max-w-full" /><div className="mt-2 flex flex-wrap gap-2 sm:hidden"><Skeleton className="h-3 w-16" /><Skeleton className="h-3 w-12" /></div></TableCell>
     <TableCell><Skeleton className="ml-auto h-4 w-16" /></TableCell>
+    <TableCell className="hidden sm:table-cell"><Skeleton className="ml-auto h-4 w-12" /></TableCell>
     <TableCell className="hidden sm:table-cell"><Skeleton className="ml-auto h-4 w-10" /></TableCell>
   </TableRow>)}</>
 }

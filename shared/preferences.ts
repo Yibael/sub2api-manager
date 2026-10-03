@@ -13,6 +13,7 @@ export const workspacePreferencesPatchSchema = workspacePreferencesSchema.partia
 export const localPreferencesSchema = z.object({ hideAmounts: z.boolean(), theme: z.enum(['light', 'dark', 'system']) })
 export const preferencesSchema = workspacePreferencesSchema.omit({ intervals: true }).extend(localPreferencesSchema.shape)
 export type WorkspacePreferences = z.infer<typeof workspacePreferencesSchema>
+export type WorkspacePreferencesInput = z.input<typeof workspacePreferencesSchema>
 export type Preferences = z.infer<typeof preferencesSchema>
 export interface WorkspaceSnapshot { revision: number; initialized: boolean; preferences: WorkspacePreferences }
 export interface PasskeySummary { id: string; name: string; rpId: string; createdAt: number; lastUsedAt: number | null }

@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js'
+import { MoneyDecimal, normalizeMoney, type MoneyAmount } from '../shared/money'
 import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage, type UserRankingsRequest } from '../shared/domain'
 import { DemandCache } from './cache'
 import { normalizeAccount, normalizeToday, normalizeUsage, object } from './normalize'
@@ -13,7 +13,7 @@ export class Monitor {
   private todayCache = new DemandCache<{ day: string; stats: TodayStats }>()
   private usageCache = new DemandCache<Usage>()
   private costCache = new DemandCache<string>()
-  private spendingCache = new DemandCache<{ amount: number; updatedAt: number }>()
+  private spendingCache = new DemandCache<{ amount: MoneyAmount; updatedAt: number }>()
   private adminCache = new DemandCache<number[]>()
   private batchUsageSupported = true
   private userRankings: Rankings
@@ -102,7 +102,7 @@ export class Monitor {
       })))
     }, force)
   }
-  private async readSpending(accountId: number, start: string, day: string, timeZone: string, includeAdmin: boolean, signal: AbortSignal, scope: SpendingScope): Promise<Sample<number>> {
+  private async readSpending(accountId: number, start: string, day: string, timeZone: string, includeAdmin: boolean, signal: AbortSignal, scope: SpendingScope): Promise<Sample<MoneyAmount>> {
     // Only raw upstream scopes have a TTL. Recompute the projection from those
     // shared samples to avoid duplicating totals or adding a second stale window.
     // This zero-TTL cache coalesces calculations and retains the last valid result.
@@ -125,23 +125,23 @@ export class Monitor {
             ...(userId === undefined ? {} : { user_id: String(userId) }),
           } }))
           if (typeof raw.total_actual_cost !== 'number' && typeof raw.total_actual_cost !== 'string') throw new Error('消费数据缺失')
-          let value: Decimal
-          try { value = new Decimal(raw.total_actual_cost) } catch { throw new Error('消费格式无效') }
-          if (!value.isFinite() || value.isNegative()) throw new Error('消费数据无效')
-          return value.toString()
+          const value = normalizeMoney(raw.total_actual_cost)
+          if (value === null) throw new Error('消费数据无效')
+          return value
           }, scope.force)
           scope.costs.set(key, pending)
         }
         const sample = await pending
         if (sample.error || sample.data === null) throw new Error(sample.error ?? '消费数据缺失')
         timestamps.push(sample.updatedAt!)
-        return new Decimal(sample.data)
+        return new MoneyDecimal(sample.data)
       }
-      let excluded = new Decimal(0)
+      let excluded = new MoneyDecimal(0)
       for (const id of admins) excluded = excluded.plus(await cost(id))
       const amount = (await cost()).minus(excluded)
-      if (amount.isNegative() || !Number.isFinite(amount.toNumber())) throw new Error('扣费统计口径不一致，请稍后重试')
-      return { amount: amount.toNumber(), updatedAt: Math.min(...timestamps) }
+      const value = normalizeMoney(amount.toString())
+      if (value === null) throw new Error('扣费统计口径不一致，请稍后重试')
+      return { amount: value, updatedAt: Math.min(...timestamps) }
     }, scope.force)
     return { data: result.data?.amount ?? null, updatedAt: result.data?.updatedAt ?? null, error: result.error }
   }
@@ -152,7 +152,7 @@ export class Monitor {
     const accounts = await this.details(input.ids, signal)
     const items = await Promise.all(input.ids.map(async id => {
       const account = accounts[id]
-      const value: Sample<number> = !account?.data || account.error
+      const value: Sample<MoneyAmount> = !account?.data || account.error
         ? { data: null, updatedAt: null, error: '账号消费暂不可用' }
         : await this.readSpending(id, day, day, input.timeZone, input.includeAdmin, signal, scope)
       return [id, value] as const
@@ -167,7 +167,7 @@ export class Monitor {
     const rows = await Promise.all(input.subscriptions.map(async subscription => {
       const cycle = subscriptionCycle(day, subscription.renewalDay)
       const invalid = !!accounts[subscription.accountId]?.error || !accounts[subscription.accountId]?.data || accounts[subscription.accountId]?.data?.type !== 'oauth'
-      const failure: Sample<number> = { data: null, updatedAt: null, error: invalid ? '仅可读取有效 OAuth 账号的订阅消费' : null }
+      const failure: Sample<MoneyAmount> = { data: null, updatedAt: null, error: invalid ? '仅可读取有效 OAuth 账号的订阅消费' : null }
       if (invalid) return { accountId: subscription.accountId, cycle, today: failure, spending: failure }
       const read = (start: string) => this.readSpending(subscription.accountId, start, day, input.timeZone, input.includeAdmin, signal, scope)
       const [spending, today] = await Promise.all([read(cycle.start), read(day)])

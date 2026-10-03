@@ -7,15 +7,15 @@ import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
 import { Field, FieldError, FieldGroup, FieldLabel } from '@/components/ui/field'
 import { Drawer, DrawerContent, DrawerHeader, DrawerTitle, DrawerDescription } from '@/components/ui/drawer'
-import type { Account } from '../../shared/domain'
+import { subscriptionSchema, type Account } from '../../shared/domain'
 
-const schema = z.object({ price: z.string().trim().min(1, '请填写成本').refine(v => Number.isFinite(Number(v)) && Number(v) >= 0 && Number(v) <= 1e9, '价格应为非负数字'), renewalDay: z.string().refine(v => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 31, '续费日应为 1–31') })
+const schema = z.object({ price: z.string().trim().min(1, '请填写成本').refine(value => subscriptionSchema.shape.price.safeParse(value).success, '价格应为不超过 1000000000 的非负数字'), renewalDay: z.string().refine(v => Number.isInteger(Number(v)) && Number(v) >= 1 && Number(v) <= 31, '续费日应为 1–31') })
 export function SubscriptionEditor({ account, onClose }: { account: Account; onClose: () => void }) {
   const { preferences, update, revision, getRevision, getPreferences, isSaving } = useWorkspace()
   const baseRevision = useRef(revision)
   const existing = preferences.subscriptions.find(s => s.accountId === account.id)
   const form = useForm({ defaultValues: { price: existing ? String(existing.price) : '', renewalDay: existing ? String(existing.renewalDay) : '' }, validators: { onSubmit: schema }, onSubmit: async ({ value }) => {
-    const saved = await update({ subscriptions: [...preferences.subscriptions.filter(s => s.accountId !== account.id), { accountId: account.id, price: Number(value.price), renewalDay: Number(value.renewalDay) }] }, baseRevision.current)
+    const saved = await update({ subscriptions: [...preferences.subscriptions.filter(s => s.accountId !== account.id), { accountId: account.id, price: subscriptionSchema.shape.price.parse(value.price), renewalDay: Number(value.renewalDay) }] }, baseRevision.current)
     if (saved) { toast.success('订阅已保存'); onClose() } else resetAfterConflict()
   } })
   function resetAfterConflict() {

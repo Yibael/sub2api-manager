@@ -20,15 +20,15 @@ describe('selectable upstream user consumption rankings', () => {
   it('queries only the selected period, using the direct daily rank without usage logs or account requests', async () => {
     const { monitor, request, calls } = setup()
     const result = await monitor.rankings(input)
-    expect(result.data?.rows.map(row => [row.userId, row.amount])).toEqual([[11, 12.84], [12, 8.26], [13, 3.18], [14, 1.32]])
+    expect(result.data?.rows.map(row => [row.userId, row.amount])).toEqual([[11, '12.84'], [12, '8.26'], [13, '3.18'], [14, '1.32']])
     expect(result.data).toMatchObject({ range: 'today', period: '2026-10-01', startDate: '2026-10-01', endDate: '2026-10-01' })
-    expect(result.data?.totalAmount).toBe(25.6)
+    expect(result.data?.totalAmount).toBe('25.6')
     expect(calls('dashboard/users-ranking')[0][1]?.query).toEqual({ start_date: '2026-10-01', end_date: '2026-10-01', timezone: 'Asia/Shanghai', limit: '50' })
     expect(request.mock.calls.map(([path]) => path).sort()).toEqual(['dashboard/users-ranking', 'users'])
     const hour = await monitor.rankings(hourly)
-    expect(hour.data?.rows.map(row => [row.userId, row.amount])).toEqual([[12, 0.86], [11, 0.42], [13, 0.18]])
+    expect(hour.data?.rows.map(row => [row.userId, row.amount])).toEqual([[12, '0.86'], [11, '0.42'], [13, '0.18']])
     expect(hour.data?.period).toBe('2026-10-01 20:00')
-    expect(hour.data?.totalAmount).toBe(1.46)
+    expect(hour.data?.totalAmount).toBe('1.46')
     expect(calls('dashboard/users-ranking')).toHaveLength(1)
   })
   it.each<[RankingRange, string]>([['7d', '2026-09-25'], ['30d', '2026-09-02']])('requests %s with inclusive natural-day bounds and keeps its cache separate', async (range, startDate) => {
@@ -37,8 +37,8 @@ describe('selectable upstream user consumption rankings', () => {
     const result = await monitor.rankings({ ...input, range })
     expect(result.data).toMatchObject({ range, startDate, endDate: '2026-10-01', period: `${startDate}/2026-10-01` })
     expect(calls('dashboard/users-ranking')[1][1]?.query).toMatchObject({ start_date: startDate, end_date: '2026-10-01' })
-    expect(result.data?.rows[0].amount).toBe(12.84 * (range === '7d' ? 7 : 30))
-    expect(result.data?.totalAmount).toBeCloseTo(25.6 * (range === '7d' ? 7 : 30), 10)
+    expect(result.data?.rows[0].amount).toBe(String(12.84 * (range === '7d' ? 7 : 30)))
+    expect(Number(result.data?.totalAmount)).toBeCloseTo(25.6 * (range === '7d' ? 7 : 30), 10)
     expect((await monitor.rankings(input)).data).toEqual(today.data)
     expect(calls('dashboard/users-ranking')).toHaveLength(2)
   })
@@ -66,7 +66,7 @@ describe('selectable upstream user consumption rankings', () => {
     } : undefined)
     const result = await monitor.rankings({ ...input, includeAdmin: true })
     expect(result.data?.rows).toHaveLength(12)
-    expect(result.data?.totalAmount).toBe(5000.3)
+    expect(result.data?.totalAmount).toBe('5000.3')
     expect(request.mock.calls.map(([path]) => path)).toEqual(['dashboard/users-ranking'])
   })
   it('deducts Admins outside the returned rank and shares their aggregate costs across devices', async () => {
@@ -80,11 +80,11 @@ describe('selectable upstream user consumption rankings', () => {
     })
     const selected = { ...input, range: '7d' as const }
     const results = await Promise.all(Array.from({ length: 20 }, () => monitor.rankings(selected)))
-    expect(results.every(result => result.data?.totalAmount === 99)).toBe(true)
+    expect(results.every(result => result.data?.totalAmount === '99')).toBe(true)
     expect(results[0].data?.rows.every(row => row.userId !== 11 && row.userId !== 999)).toBe(true)
     expect(calls('usage/stats')).toHaveLength(1)
     expect(calls('usage/stats')[0][1]?.query).toEqual({ start_date: '2026-09-25', end_date: '2026-10-01', timezone: 'Asia/Shanghai', user_id: '999', nocache: 'true' })
-    expect((await monitor.rankings({ ...selected, includeAdmin: true })).data?.totalAmount).toBe(101.3)
+    expect((await monitor.rankings({ ...selected, includeAdmin: true })).data?.totalAmount).toBe('101.3')
     await monitor.rankings(selected)
     expect(calls('usage/stats')).toHaveLength(1)
     await monitor.rankings({ ...selected, force: true })
@@ -100,8 +100,8 @@ describe('selectable upstream user consumption rankings', () => {
     } : undefined)
     const excluded = await monitor.rankings(hourly)
     expect(excluded.data?.rows).toHaveLength(12)
-    expect(excluded.data?.totalAmount).toBe(1.5)
-    expect((await monitor.rankings({ ...hourly, includeAdmin: true })).data?.totalAmount).toBe(2.3)
+    expect(excluded.data?.totalAmount).toBe('1.5')
+    expect((await monitor.rankings({ ...hourly, includeAdmin: true })).data?.totalAmount).toBe('2.3')
     expect(request.mock.calls.every(([path]) => ['users', 'dashboard/users-trend'].includes(path))).toBe(true)
   })
   it('preserves the last complete rank and total when a missing Admin aggregate fails', async () => {
@@ -111,7 +111,7 @@ describe('selectable upstream user consumption rankings', () => {
       if (path === 'usage/stats') { if (fail) throw new Error('Admin 消费暂不可用'); return { total_actual_cost: 1 } }
     })
     const previous = await monitor.rankings(input)
-    expect(previous.data?.totalAmount).toBe(9)
+    expect(previous.data?.totalAmount).toBe('9')
     fail = true
     const result = await monitor.rankings({ ...input, force: true })
     expect(result.data).toEqual(previous.data)
@@ -135,7 +135,7 @@ describe('selectable upstream user consumption rankings', () => {
       if (path === 'dashboard/users-ranking') return { start_date: options!.query!.start_date, end_date: options!.query!.end_date, total_actual_cost: 0, ranking: [] }
       if (path === 'usage/stats') return { total_actual_cost: 1 }
     })
-    expect((await monitor.rankings({ ...input, includeAdmin: true })).data).toMatchObject({ totalAmount: 0, rows: [] })
+    expect((await monitor.rankings({ ...input, includeAdmin: true })).data).toMatchObject({ totalAmount: '0', rows: [] })
     const excluded = await monitor.rankings(input)
     expect(excluded.data).toBeNull()
     expect(excluded.error).toMatch(/口径不一致/)
@@ -171,7 +171,7 @@ describe('selectable upstream user consumption rankings', () => {
     })
     const result = await monitor.rankings({ ...input, range: '7d' })
     expect(result.data?.rows.map(row => row.userId)).toEqual(Array.from({ length: 12 }, (_, i) => i + 41))
-    expect(result.data?.totalAmount).toBe(795)
+    expect(result.data?.totalAmount).toBe('795')
     expect(calls('dashboard/users-trend')[0][1]?.query).toMatchObject({ granularity: 'day', start_date: '2026-09-25', end_date: '2026-10-01' })
   })
   it('combines a user across multiple aggregate days exactly in the Admin fallback', async () => {
@@ -185,8 +185,8 @@ describe('selectable upstream user consumption rankings', () => {
     })
     const result = await monitor.rankings({ ...input, range: '30d' })
     expect(result.data?.rows).toHaveLength(1)
-    expect(result.data?.rows[0]).toMatchObject({ userId: 100, amount: 0.3, requests: 200, tokens: 20000 })
-    expect(result.data?.totalAmount).toBe(0.3)
+    expect(result.data?.rows[0]).toMatchObject({ userId: 100, amount: '0.3', requests: 200, tokens: 20000 })
+    expect(result.data?.totalAmount).toBe('0.3')
   })
   it('keeps hourly buckets in upstream timezone while calendar-day ranges use the preference', async () => {
     vi.setSystemTime(new Date('2026-10-01T16:30:00Z'))
@@ -200,7 +200,7 @@ describe('selectable upstream user consumption rankings', () => {
     const { monitor } = setup(async path => path === 'dashboard/users-trend' ? {
       start_date: '2026-10-01', end_date: '2026-10-01', granularity: 'hour', trend: [{ ...row(11), date: '2026-10-01 19:00' }],
     } : undefined)
-    expect(await monitor.rankings(hourly)).toMatchObject({ data: { rows: [], totalAmount: 0, period: '2026-10-01 20:00' }, error: null })
+    expect(await monitor.rankings(hourly)).toMatchObject({ data: { rows: [], totalAmount: '0', period: '2026-10-01 20:00' }, error: null })
   })
   it.each<RankingRange>(['hour', 'today', '7d', '30d'])('shares %s aggregates and Admin lookups across devices and inclusion settings', async range => {
     const { monitor, calls } = setup()

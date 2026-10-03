@@ -5,6 +5,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
 import { ErrorNotice, Money } from '@/components/common'
 import { RankingSkeletonRows, StableRegion } from '@/components/loading'
+import { formatTokenCount } from '@/lib/token-count'
 import type { RankingRange, Sample, UserRanking } from '../../shared/domain'
 
 const ranges: { value: RankingRange; label: string }[] = [
@@ -35,11 +36,12 @@ export function UserRankingCard({ title, description, sample, error, loading, cu
     <CardContent><StableRegion phase={`${range}:${pending ? 'pending' : 'ready'}`} busy={loading} contentClassName="flex flex-col gap-4">
       <ErrorNotice message={message} />
       {pending || ranking?.rows.length ? <Table className="table-fixed" aria-label={title}>
-        <TableHeader><TableRow><TableHead scope="col" className="w-9"><span className="sr-only">排名</span>#</TableHead><TableHead scope="col">用户</TableHead><TableHead scope="col" className="w-24 text-right">消费</TableHead><TableHead scope="col" className="hidden w-16 text-right sm:table-cell">请求</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead scope="col" className="w-9"><span className="sr-only">排名</span>#</TableHead><TableHead scope="col">用户</TableHead><TableHead scope="col" className="w-24 text-right">消费</TableHead><TableHead scope="col" className="hidden w-20 text-right sm:table-cell">Token</TableHead><TableHead scope="col" className="hidden w-16 text-right sm:table-cell">请求</TableHead></TableRow></TableHeader>
         <TableBody>{pending ? <RankingSkeletonRows count={placeholderRows} /> : ranking!.rows.map((row, index) => <TableRow key={row.userId} className="ranking-row">
           <TableCell><span className="text-muted-foreground tabular-nums">{index + 1}</span></TableCell>
-          <TableCell><span className="block truncate" title={row.name}>{row.name}</span><span className="mt-1 block text-xs text-muted-foreground sm:hidden">{row.requests.toLocaleString('en-US')} 次请求</span></TableCell>
+          <TableCell><span className="block truncate" title={row.name}>{row.name}</span><span className="mt-1 flex flex-wrap items-center gap-x-2 gap-y-1 text-xs text-muted-foreground sm:hidden"><span title={row.tokens.toLocaleString('en-US') + ' Token'} className="tabular-nums">{formatTokenCount(row.tokens)} Token</span><span>{row.requests.toLocaleString('en-US')} 次请求</span></span></TableCell>
           <TableCell className="text-right"><Money value={row.amount} currency={currency} /></TableCell>
+          <TableCell className="hidden text-right sm:table-cell"><span title={row.tokens.toLocaleString('en-US') + ' Token'} className="tabular-nums">{formatTokenCount(row.tokens)}</span></TableCell>
           <TableCell className="hidden text-right sm:table-cell"><span className="text-muted-foreground tabular-nums">{row.requests.toLocaleString('en-US')}</span></TableCell>
         </TableRow>)}</TableBody>
       </Table> : <Empty className="min-h-40"><EmptyHeader><EmptyTitle>{message ? '消费榜暂不可用' : '暂无消费记录'}</EmptyTitle></EmptyHeader></Empty>}

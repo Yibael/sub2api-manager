@@ -6,6 +6,22 @@ import { WorkspaceStore } from '../server/workspace'
 import { createApp } from '../server/app'
 
 describe('persistent workspace', () => {
+  it('loads legacy numeric prices and saves fractional prices as decimal strings without precision loss', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'sub2api-workspace-test-'))
+    try {
+      const path = join(directory, 'workspace.json')
+      const store = await WorkspaceStore.open(path, 'UTC', 'money-test')
+      await store.update(0, { subscriptions: [{ accountId: 1, price: 20, renewalDay: 15 }] })
+      const legacy = JSON.parse(await readFile(path, 'utf8'))
+      legacy.preferences.subscriptions[0].price = 20
+      await writeFile(path, JSON.stringify(legacy))
+      const reopened = await WorkspaceStore.open(path, 'UTC', 'money-test')
+      expect(reopened.snapshot().preferences.subscriptions[0].price).toBe('20')
+      await reopened.update(1, { subscriptions: [{ accountId: 1, price: '20.000000000000000001', renewalDay: 15 }] })
+      expect(JSON.parse(await readFile(path, 'utf8')).preferences.subscriptions[0].price).toBe('20.000000000000000001')
+      expect((await WorkspaceStore.open(path, 'UTC', 'money-test')).snapshot().preferences.subscriptions[0].price).toBe('20.000000000000000001')
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
   it('migrates intervals and preserves identity, preferences and credentials after reload and key rotation', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sub2api-workspace-test-'))
     try {

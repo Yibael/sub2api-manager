@@ -28,13 +28,13 @@ describe('safe upstream projection', () => {
     expect(JSON.stringify(account)).not.toMatch(/secret|private|credentials|access_token/)
   })
   it('keeps monetary metrics independent and missing values unknown', () => {
-    expect(normalizeToday({ standard_cost: 0, cost: 5, user_cost: 9, tokens: -1, requests: 1.5 })).toEqual({ standardCost: 0, accountCost: 5, userCost: 9, tokens: null, requests: null })
+    expect(normalizeToday({ standard_cost: 0, cost: 5, user_cost: 9, tokens: -1, requests: 1.5 })).toEqual({ standardCost: '0', accountCost: '5', userCost: '9', tokens: null, requests: null })
     expect(normalizeToday({ cost: 5 }).standardCost).toBeNull()
   })
   it('only estimates OpenAI OAuth quota from the same seven-day sample', () => {
     const account = normalizeAccount({ id: 1, type: 'oauth', platform: 'openai' })
     const usage = { seven_day: { utilization: 25, window_stats: { cost: 10 } } }
-    expect(normalizeUsage(usage, account).estimatedWeeklyCost).toBe(40)
+    expect(normalizeUsage(usage, account).estimatedWeeklyCost).toBe('40')
     expect(normalizeUsage(usage, { ...account, platform: 'anthropic' }).estimatedWeeklyCost).toBeNull()
     expect(() => normalizeUsage({ error: 'PRIVATE UPSTREAM MESSAGE' }, account)).toThrow('额度暂不可用')
   })

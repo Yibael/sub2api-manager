@@ -31,7 +31,7 @@ describe('monitor queries', () => {
     await monitor.today([1, 2])
     vi.advanceTimersByTime(1000)
     const b = await monitor.today([2, 3])
-    expect(b.items[2].data?.standardCost).toBe(2)
+    expect(b.items[2].data?.standardCost).toBe('2')
     expect(request.mock.calls[1][1]?.body).toEqual({ account_ids: [3] })
   })
   it('hides yesterday without bypassing the interval at midnight', async () => {
@@ -44,7 +44,7 @@ describe('monitor queries', () => {
     expect(midnight.items[1].data).toBeNull()
     expect(request).toHaveBeenCalledTimes(1)
     vi.setSystemTime(new Date('2026-09-29T16:00:04Z'))
-    expect((await monitor.today([1])).items[1].data?.standardCost).toBe(1)
+    expect((await monitor.today([1])).items[1].data?.standardCost).toBe('1')
     expect(request).toHaveBeenCalledTimes(2)
   })
   it('does not query OAuth usage for an ordinary OpenAI API-key account', async () => {
@@ -71,7 +71,7 @@ describe('monitor queries', () => {
     const { request, monitor } = setup(async (_path, options) => ({ total_actual_cost: options?.query?.user_id ? '0.10' : '0.30' }))
     const input = { subscriptions: [{ accountId: 1, price: 20, renewalDay: 29 }], timeZone: 'Asia/Shanghai', includeAdmin: false }
     const result = await monitor.spending(input)
-    expect(result.rows[0].today.data).toBe(0.2)
+    expect(result.rows[0].today.data).toBe('0.2')
     expect(result.rows[0].today).toEqual(result.rows[0].spending)
     expect(request.mock.calls.filter(call => call[0] === 'usage/stats')).toHaveLength(2)
     await monitor.spending(input)
@@ -81,8 +81,8 @@ describe('monitor queries', () => {
   it('separates Admin inclusion and timezone scopes', async () => {
     const { request, monitor } = setup(async (_path, options) => ({ total_actual_cost: options?.query?.user_id ? 1 : 4 }))
     const input = { subscriptions: [{ accountId: 1, price: 20, renewalDay: 29 }], timeZone: 'Asia/Shanghai', includeAdmin: true }
-    expect((await monitor.spending(input)).rows[0].today.data).toBe(4)
-    expect((await monitor.spending({ ...input, includeAdmin: false })).rows[0].today.data).toBe(3)
+    expect((await monitor.spending(input)).rows[0].today.data).toBe('4')
+    expect((await monitor.spending({ ...input, includeAdmin: false })).rows[0].today.data).toBe('3')
     await monitor.spending({ ...input, timeZone: 'UTC' })
     expect(request.mock.calls.filter(call => call[0] === 'usage/stats')).toHaveLength(3)
   })
@@ -190,11 +190,11 @@ describe('all upstream demand paths', () => {
     const input = { ids: [1], timeZone: 'Asia/Shanghai', includeAdmin: true }
     const original = (await monitor.dailySpending(input)).items[1]
     vi.advanceTimersByTime(14000)
-    expect((await monitor.dailySpending({ ...input, includeAdmin: false })).items[1].data).toBe(3)
+    expect((await monitor.dailySpending({ ...input, includeAdmin: false })).items[1].data).toBe('3')
     vi.advanceTimersByTime(1000)
     total = 8
     const renewed = (await monitor.dailySpending({ ...input, includeAdmin: false })).items[1]
-    expect(renewed.data).toBe(7)
+    expect(renewed.data).toBe('7')
     expect(renewed.updatedAt).toBe(original.updatedAt! + 14000)
     expect(request.mock.calls.filter(([path, options]) => path === 'usage/stats' && !options?.query?.user_id)).toHaveLength(2)
   })
@@ -221,9 +221,9 @@ describe('unified daily consumption', () => {
     const { monitor } = setup(async (_path, options) => ({ total_actual_cost: options?.query?.user_id ? '0.10' : '0.30' }))
     const input = { ids: [1, 3], timeZone: 'Asia/Shanghai', includeAdmin: false }
     const excluded = await monitor.dailySpending(input)
-    expect(excluded.items[1].data).toBe(0.2)
-    expect(excluded.items[3].data).toBe(0.2)
-    expect((await monitor.dailySpending({ ...input, includeAdmin: true })).items[3].data).toBe(0.3)
+    expect(excluded.items[1].data).toBe('0.2')
+    expect(excluded.items[3].data).toBe('0.2')
+    expect((await monitor.dailySpending({ ...input, includeAdmin: true })).items[3].data).toBe('0.3')
   })
   it('shares daily samples with cycle statistics and across devices without background polling', async () => {
     const { request, monitor } = setup(async (_path, options) => ({ total_actual_cost: options?.query?.user_id ? 1 : 4 }))

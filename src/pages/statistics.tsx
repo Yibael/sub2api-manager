@@ -1,6 +1,6 @@
 import { CalendarDays, Coins, Wallet } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import Decimal from 'decimal.js'
+import { sumMoney } from '../../shared/money'
 import { useMemo, useState } from 'react'
 import { useWorkspace } from '@/lib/preferences'
 import { useMonitor } from '@/lib/monitor'
@@ -27,9 +27,10 @@ export function StatisticsPage() {
     try { await Promise.all([monitor.refresh(), rankings.forceRefresh()]) }
     finally { setRefreshing(false) }
   }
-  const cost = useMemo(() => monitor.subscriptions.length ? monitor.subscriptions.reduce((sum, s) => sum.plus(s.price), new Decimal(0)).toNumber() : null, [monitor.subscriptions])
+  const cost = useMemo(() => monitor.subscriptions.length ? sumMoney(monitor.subscriptions.map(subscription => subscription.price)) : null, [monitor.subscriptions])
   const spendingPending = monitor.subscriptions.length > 0 && !monitor.spending.data && !monitor.spending.error
   return <div className="page-stack"><PageHeading title="消费统计" action={<RefreshButton busy={refreshing} onClick={() => void refresh()} />} /><ErrorNotice message={monitor.spending.error?.message ?? monitor.status.error?.message} /><div className="metric-grid three"><Metric label="今日消费" value={<Money value={spendingTotal(monitor, 'today')} currency={preferences.actualCurrency} />} icon={<Wallet />} loading={spendingPending} /><Metric label="周期消费" value={<Money value={spendingTotal(monitor, 'spending')} currency={preferences.actualCurrency} />} icon={<Coins />} loading={spendingPending} /><Metric label="成本" value={<Money value={cost} currency={preferences.costCurrency} />} icon={<CalendarDays />} /></div>
+    <p className="text-xs text-muted-foreground">消费汇总仅包含已关注且配置订阅的账号；消费榜统计全站用户。</p>
     <UserRankingCard title="消费榜" description={`${rangeLabel}${period.timeZone === preferences.timeZone ? '' : ` · ${period.timeZone}`}`} sample={rankings.data} error={rankings.error?.message} loading={rankings.isFetching} currency={preferences.actualCurrency} range={range} onRangeChange={setRange} />
     {!preferences.pins.length ? <NoPins /> : !monitor.subscriptions.length ? <Alert><AlertTitle>暂无订阅</AlertTitle><AlertDescription><Button variant="link" asChild><Link to="/accounts" replace>配置订阅</Link></Button></AlertDescription></Alert> : <Card><CardHeader><CardTitle>账号消费明细</CardTitle></CardHeader><CardContent className="flex flex-col gap-4">{monitor.subscriptions.map(subscription => {
       const row = monitor.spending.data?.rows.find(row => row.accountId === subscription.accountId), account = monitor.status.data?.[subscription.accountId]?.data

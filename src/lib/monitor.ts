@@ -4,6 +4,7 @@ import { useWorkspace } from './preferences'
 import { useCompletionQuery } from './completion-query'
 import { refreshCountdown } from './refresh-countdown'
 import { dateInZone, type Account, type Sample, type SpendingRow, type TodayStats, type Usage } from '../../shared/domain'
+import type { MoneyAmount } from '../../shared/money'
 
 export function useForeground() {
   const [visible, setVisible] = useState(document.visibilityState === 'visible')
@@ -61,7 +62,7 @@ export function useMonitor(requestedIds?: number[], withSpending = true, scope: 
     (force, signal) => api('/spending', { ...spendingBody, force }, signal))
   const dailyBody = { ids, timeZone: preferences.timeZone, includeAdmin: preferences.includeAdmin }
   const dailyEnabled = enabled && withSpending && requestedIds !== undefined
-  const dailySpending = useCompletionQuery<{ day: string; items: Record<number, Sample<number>> }>(['daily-spending', config.instanceId, dailyBody, localDay], config.intervals.spending, dailyEnabled,
+  const dailySpending = useCompletionQuery<{ day: string; items: Record<number, Sample<MoneyAmount>> }>(['daily-spending', config.instanceId, dailyBody, localDay], config.intervals.spending, dailyEnabled,
     (force, signal) => api('/spending/today', { ...dailyBody, force }, signal))
   const refresh = async () => {
     if (refreshing || !enabled) return

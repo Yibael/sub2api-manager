@@ -68,7 +68,7 @@ describe('application boundary', () => {
     expect((await request('/spending/today', { ids: [4], timeZone: 'invalid', includeAdmin: false }, session)).status).toBe(422)
     const response = await request('/spending/today', { ids: [4], timeZone: 'UTC', includeAdmin: false }, session)
     expect(response.status).toBe(200)
-    expect((await response.json()).items[4].data).toBe(12.3)
+    expect((await response.json()).items[4].data).toBe('12.3')
   })
   it('protects and validates site-wide user rankings without requiring pinned accounts', async () => {
     const { request, upstream } = setup()
@@ -80,7 +80,7 @@ describe('application boundary', () => {
     expect(response.status).toBe(200)
     expect(response.headers.get('cache-control')).toBe('no-store')
     const result = await response.json()
-    expect(result.data.totalAmount).toBe(25.6)
+    expect(result.data.totalAmount).toBe('25.6')
     expect(result.data.rows[0].userId).toBe(11)
     expect(result.data.range).toBe('today')
     expect(result.data.rows.some((row: { userId: number }) => row.userId === 7)).toBe(false)

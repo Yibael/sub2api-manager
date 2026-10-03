@@ -2,7 +2,7 @@ import { randomBytes } from 'node:crypto'
 import { mkdir, readFile, rename, writeFile, unlink } from 'node:fs/promises'
 import { dirname } from 'node:path'
 import { z } from 'zod'
-import { workspacePreferencesSchema, defaultWorkspacePreferences, type WorkspacePreferences, type WorkspaceSnapshot, type PasskeySummary } from '../shared/preferences'
+import { workspacePreferencesSchema, defaultWorkspacePreferences, type WorkspacePreferencesInput, type WorkspaceSnapshot, type PasskeySummary } from '../shared/preferences'
 import { readSettings } from './settings'
 
 const passkeySchema = z.object({
@@ -64,7 +64,7 @@ export class WorkspaceStore {
     this.tail = operation.catch(() => {})
     return operation
   }
-  update(revision: number, patch: Partial<WorkspacePreferences>) {
+  update(revision: number, patch: Partial<WorkspacePreferencesInput>) {
     return this.mutate(state => {
       if (state.revision !== revision) throw new WorkspaceConflict()
       state.preferences = workspacePreferencesSchema.parse({ ...state.preferences, ...patch })

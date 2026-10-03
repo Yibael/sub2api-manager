@@ -1,4 +1,4 @@
-import Decimal from 'decimal.js'
+import { sumMoney } from '../../shared/money'
 import type { Account, Sample, TodayStats } from '../../shared/domain'
 
 export function overviewTotals(ids: number[], status?: Record<number, Sample<Account>>, today?: Record<number, Sample<TodayStats>>) {
@@ -10,7 +10,7 @@ export function overviewTotals(ids: number[], status?: Record<number, Sample<Acc
   }
   const usage = ids.map(id => today?.[id])
   const standardUsage = ids.length > 0 && usage.every(sample => sample?.data?.standardCost != null && !sample.error)
-    ? usage.reduce((total, sample) => total.plus(sample!.data!.standardCost!), new Decimal(0)).toNumber()
+    ? sumMoney(usage.map(sample => sample!.data!.standardCost!))
     : null
   return { concurrency: sumConcurrency('currentConcurrency'), concurrencyLimit: sumConcurrency('concurrency'), standardUsage }
 }

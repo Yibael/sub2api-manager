@@ -1,6 +1,6 @@
 import { Activity, ArrowUpRight, ChartNoAxesCombined, Coins, Pin, Wallet } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
-import Decimal from 'decimal.js'
+import { sumMoney } from '../../shared/money'
 import { useMemo } from 'react'
 import { useMonitor, type MonitorData } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
@@ -12,7 +12,7 @@ import { overviewTotals } from '@/lib/overview'
 export function spendingTotal(monitor: MonitorData, field: 'today' | 'spending') {
   const rows = monitor.spending.data?.rows
   if (!rows?.length || rows.length !== monitor.subscriptions.length || rows.some(row => row[field].data === null || row[field].error)) return null
-  return rows.reduce((sum, row) => sum.plus(row[field].data!), new Decimal(0)).toNumber()
+  return sumMoney(rows.map(row => row[field].data!))
 }
 export function DashboardPage() {
   const { preferences } = useWorkspace()
