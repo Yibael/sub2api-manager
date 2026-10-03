@@ -26,7 +26,7 @@ export function DetailPage() {
   const spendingPending = !!subscription && !spending && !monitor.spending.error
   return <div className="page-stack">
     <div><BackButton fallback="/accounts" /></div>
-    <PageHeading title={account?.name ?? `账号 #${rawId}`} action={<RefreshButton countdown={monitor.nextRefreshIn} busy={monitor.isFetching} onClick={() => void monitor.refresh()} />} />
+    <PageHeading title={account?.name ?? `账号 #${rawId}`} action={<RefreshButton countdown={monitor.nextRefreshIn} busy={pending || monitor.refreshing || monitor.quota.isFetching} onClick={() => void monitor.refresh()} />} />
     <ErrorNotice message={!valid ? '账号 ID 无效' : monitor.status.error?.message ?? sample?.error ?? monitor.today.error?.message ?? today?.error ?? monitor.quota.error?.message ?? usage?.error} />
     <StableRegion phase={pending ? 'pending' : 'ready'} busy={monitor.isFetching} contentClassName="page-stack">
       {!account ? pending ? <DetailSkeleton /> : <p className="text-sm text-muted-foreground">暂无账号详情</p> : <>
