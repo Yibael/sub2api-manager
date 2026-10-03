@@ -4,6 +4,13 @@ import { DemandCache } from '../server/cache'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 describe('upstream transport', () => {
+  it('sends explicit PUT mutations once with their JSON body', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { id: 1, rate_multiplier: 0.125 } }))
+    vi.stubGlobal('fetch', fetch)
+    await createUpstream('https://upstream.example', 'key').request('groups/1', { method: 'PUT', body: { rate_multiplier: 0.125 } })
+    expect(fetch).toHaveBeenCalledTimes(1)
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'PUT', body: '{"rate_multiplier":0.125}', headers: { 'Content-Type': 'application/json' }, redirect: 'manual' })
+  })
   it('normalizes subpaths, adds the key server-side and never follows redirects', async () => {
     const fetch = vi.fn().mockResolvedValue(new Response(JSON.stringify({ code: 0, data: { ok: true } })))
     vi.stubGlobal('fetch', fetch)

@@ -10,7 +10,9 @@
 
 ## 全部上游路径
 
-真实网络请求唯一入口是 `server/upstream.ts` 的 `fetch`；调用均来自 `server/monitor.ts`。`server/index.ts` 为当前实例创建一个 Monitor，并由所有 API 请求共用。
+真实网络请求唯一入口是 `server/upstream.ts` 的 `fetch`；Monitor 及其 Rankings、Groups 服务共用同一上游连接。`server/index.ts` 为当前实例创建一个 Monitor，并由所有 API 请求共用。
+
+分组目录按需分页读取并共享 60 秒缓存，无前后端定时轮询。调整倍率先直接读取单个分组生成确认预览，最终确认时再读一次并检查变更，随后仅发送一次 `PUT groups/:id`，请求体只包含 `rate_multiplier`。预览、取消和凭证或变更检查失败均不写入上游；写请求失败不自动重试。保存尝试后作废目录缓存，以后续读取核对实际结果。
 
 以下路径相对于 `/api/v1/admin/`：
 

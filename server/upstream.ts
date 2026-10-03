@@ -3,7 +3,7 @@ import { object } from './normalize'
 export class UpstreamError extends Error {
   constructor(public readonly status: number, message: string, public readonly retryAt?: number) { super(message) }
 }
-export interface Upstream { request(path: string, options?: { query?: Record<string, string>; body?: unknown; signal?: AbortSignal }): Promise<unknown> }
+export interface Upstream { request(path: string, options?: { query?: Record<string, string>; body?: unknown; signal?: AbortSignal; method?: 'PUT' }): Promise<unknown> }
 
 export function createUpstream(baseUrl: string, key: string, allowHTTP = false): Upstream {
   const url = new URL(baseUrl)
@@ -35,7 +35,7 @@ export function createUpstream(baseUrl: string, key: string, allowHTTP = false):
         const target = new URL(path, url)
         for (const [name, value] of Object.entries(options.query ?? {})) target.searchParams.set(name, value)
         const response = await fetch(target, {
-          method: options.body === undefined ? 'GET' : 'POST', redirect: 'manual', signal,
+          method: options.method ?? (options.body === undefined ? 'GET' : 'POST'), redirect: 'manual', signal,
           headers: { 'x-api-key': key, Accept: 'application/json', ...(options.body === undefined ? {} : { 'Content-Type': 'application/json' }) },
           body: options.body === undefined ? undefined : JSON.stringify(options.body),
         })

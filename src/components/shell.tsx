@@ -15,7 +15,7 @@ import { LoadingValue, LoginSkeleton, RouteSkeleton, StableRegion } from '@/comp
 import { Toaster } from '@/components/ui/sonner'
 import { SetupPage } from '@/pages/setup'
 
-const navigation = [{ to: '/', label: '概览', icon: LayoutDashboard }, { to: '/accounts', label: '账号', icon: Layers }, { to: '/statistics', label: '统计', icon: ChartNoAxesCombined }, { to: '/settings', label: '设置', icon: Settings2 }] as const
+const navigation = [{ to: '/', label: '概览', icon: LayoutDashboard }, { to: '/accounts', label: '资源', icon: Layers }, { to: '/statistics', label: '统计', icon: ChartNoAxesCombined }, { to: '/settings', label: '设置', icon: Settings2 }] as const
 export function Root() {
   const config = useQuery({ queryKey: ['config'], queryFn: ({ signal }) => loadConfig(signal), staleTime: 60_000 })
   useSyncExternalStore(pageSession.subscribe, pageSession.getSnapshot, pageSession.getSnapshot)
@@ -40,7 +40,7 @@ function Shell() {
 }
 function AppFrame({ children, pins }: { children: ReactNode; pins?: number }) {
   const pathname = useRouterState({ select: state => state.location.pathname })
-  const current = navigation.find(item => item.to === '/' ? pathname === '/' : pathname.startsWith(item.to)) ?? navigation[0]
+  const current = navigation.find(item => item.to === '/' ? pathname === '/' : pathname.startsWith(item.to) || item.to === '/accounts' && pathname === '/groups') ?? navigation[0]
   return <div className="app-shell"><aside className="desktop-sidebar"><Link to="/" replace aria-label="返回概览"><Brand /></Link><nav aria-label="主导航" className="desktop-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace className="nav-item" data-active={current.to === item.to}><item.icon /><span>{item.label}</span>{item.to === '/accounts' && <Badge variant="secondary" className="ml-auto tabular-nums"><LoadingValue loading={pins === undefined}>{pins}</LoadingValue></Badge>}</Link>)}</nav><div className="sidebar-bottom"><Link className="nav-item" to="/settings/app"><Download /><span>安装应用</span></Link></div></aside>
     <div className="app-main"><main className="main-content">{children}</main></div><nav aria-label="移动导航" className="mobile-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace data-active={current.to === item.to}><item.icon /><span>{item.label}</span></Link>)}</nav></div>
 }

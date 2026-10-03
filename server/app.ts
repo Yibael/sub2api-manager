@@ -7,6 +7,8 @@ import { workspacePreferencesPatchSchema } from '../shared/preferences'
 import type { Monitor } from './monitor'
 import { WorkspaceStore, WorkspaceConflict } from './workspace'
 import { Passkeys, PasskeyError } from './passkeys'
+import { GroupError } from './groups'
+import { groupRateRequestSchema } from '../shared/groups'
 
 export interface AppOptions {
   monitor: Monitor | null; password: string; origin: string; secureCookie: boolean;
@@ -41,6 +43,8 @@ export function createApp(options: AppOptions) {
   const requireMonitor = () => options.monitor ? undefined : new Response(JSON.stringify({ error: '请先配置服务端 sub2api 连接' }), { status: 503, headers: { 'Content-Type': 'application/json' } })
   const idsSchema = z.object({ ids: z.array(z.number().int().positive()).max(100).transform(ids => [...new Set(ids)]), force: z.boolean().optional() })
   const passwordSchema = z.object({ password: z.string().min(1).max(256) })
+  const groupParams = z.object({ id: z.coerce.number().int().positive().max(Number.MAX_SAFE_INTEGER) })
+  const groupConfirmation = z.object({ token: z.string().regex(/^[a-f0-9]{64}$/) }).strict()
   const credentialResponse = z.object({ id: z.string().min(1).max(2048), rawId: z.string().min(1).max(2048), type: z.literal('public-key'), response: z.record(z.string(), z.unknown()), clientExtensionResults: z.record(z.string(), z.unknown()) }).passthrough().refine(value => JSON.stringify(value).length <= 160_000)
   return new Elysia({ name: 'sub2api-manager', prefix: '/api' })
     .onRequest(({ request, set }) => {
@@ -52,8 +56,8 @@ export function createApp(options: AppOptions) {
       }
     })
     .onError(({ code, error, set }) => {
-      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
-      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
+      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError || error instanceof GroupError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
+      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError || error instanceof GroupError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
     })
     .get('/config', ({ cookie, request }): PublicConfig => {
       const auth = authenticated(cookie[sessionName].value, pageToken(request))
@@ -129,6 +133,13 @@ export function createApp(options: AppOptions) {
       return { ok: true }
     }, { body: z.object({ id: z.string().min(1).max(2048) }) })
     .get('/accounts', ({ query }) => options.monitor!.accounts(query.force === 'true'), { beforeHandle: requireMonitor })
+    .get('/groups', ({ query }) => options.monitor!.groupManagement.list(query.force === 'true'), { beforeHandle: requireMonitor })
+    .post('/groups/:id/rate/preview', ({ params, body, cookie }) => options.monitor!.groupManagement.prepare(params.id, body.rateMultiplier, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupRateRequestSchema, beforeHandle: requireMonitor })
+    .post('/groups/:id/rate/cancel', ({ params, body, cookie }) => {
+      options.monitor!.groupManagement.cancel(params.id, body.token, sessionKey(cookie[sessionName].value as string))
+      return { ok: true }
+    }, { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
+    .put('/groups/:id/rate', ({ params, body, cookie }) => options.monitor!.groupManagement.confirm(params.id, body.token, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
     .post('/status', ({ body }) => options.monitor!.details(body.ids, undefined, body.force), { body: idsSchema, beforeHandle: requireMonitor })
     .post('/today', ({ body }) => options.monitor!.today(body.ids, body.force), { body: idsSchema, beforeHandle: requireMonitor })
     .post('/quota', ({ body }) => options.monitor!.quota(body.ids, body.force), { body: idsSchema, beforeHandle: requireMonitor })

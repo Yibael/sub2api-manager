@@ -4,10 +4,12 @@ import { DemandCache } from './cache'
 import { normalizeAccount, normalizeToday, normalizeUsage, object } from './normalize'
 import { UpstreamError, type Upstream } from './upstream'
 import { Rankings } from './rankings'
+import { Groups } from './groups'
 
 interface SpendingScope { force: boolean; costs: Map<string, Promise<Sample<string>>>; admins?: Promise<Sample<number[]>> }
 
 export class Monitor {
+  readonly groupManagement: Groups
   private directoryCache = new DemandCache<Account[]>()
   private accountsCache = new DemandCache<Account>()
   private todayCache = new DemandCache<{ day: string; stats: TodayStats }>()
@@ -18,6 +20,7 @@ export class Monitor {
   private batchUsageSupported = true
   private userRankings: Rankings
   constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {
+    this.groupManagement = new Groups(upstream)
     this.userRankings = new Rankings(upstream, () => this.intervals, serverTimeZone, (signal, force) => this.admins(signal, force))
   }
 
