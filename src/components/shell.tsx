@@ -30,13 +30,15 @@ export function Root() {
 function Shell() {
   const { preferences } = useWorkspace()
   const pathname = useRouterState({ select: state => state.location.pathname })
+  // Keep the resource layout mounted so its segmented indicator can slide between routes.
+  const phase = pathname === '/accounts' || pathname === '/groups' ? 'resources' : pathname
   const [online, setOnline] = useState(navigator.onLine)
   useEffect(() => {
     const on = () => { setOnline(true); void queryClient.invalidateQueries({ predicate: q => q.meta?.poll === true }) }, off = () => setOnline(false)
     window.addEventListener('online', on); window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
-  return <AppFrame pins={preferences.pins.length}><PwaUpdate /><StableRegion><PreferencesMigration /></StableRegion><StableRegion>{!online && <div className="mb-5"><ErrorNotice message="网络已断开" /></div>}</StableRegion><StableRegion phase={pathname}><Outlet /></StableRegion></AppFrame>
+  return <AppFrame pins={preferences.pins.length}><PwaUpdate /><StableRegion><PreferencesMigration /></StableRegion><StableRegion>{!online && <div className="mb-5"><ErrorNotice message="网络已断开" /></div>}</StableRegion><StableRegion phase={phase}><Outlet /></StableRegion></AppFrame>
 }
 function AppFrame({ children, pins }: { children: ReactNode; pins?: number }) {
   const pathname = useRouterState({ select: state => state.location.pathname })

@@ -2,7 +2,7 @@ import { useState } from 'react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Empty, EmptyHeader, EmptyTitle } from '@/components/ui/empty'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
-import { ToggleGroup, ToggleGroupItem } from '@/components/ui/toggle-group'
+import { SegmentedControl } from '@/components/segmented-control'
 import { ErrorNotice, Money } from '@/components/common'
 import { RankingSkeletonRows, StableRegion } from '@/components/loading'
 import { formatTokenCount } from '@/lib/token-count'
@@ -29,9 +29,7 @@ export function UserRankingCard({ title, description, sample, error, loading, cu
         </div>
         <CardDescription className="min-h-5">{description}</CardDescription>
       </div>
-      <ToggleGroup type="single" variant="segmented" spacing={1} size="sm" value={range} aria-label="消费榜时间范围" className="w-full shrink-0 sm:w-fit" onValueChange={value => { const selected = ranges.find(range => range.value === value); if (selected) onRangeChange(selected.value) }}>
-        {ranges.map(option => <ToggleGroupItem key={option.value} value={option.value} className="flex-1 sm:flex-none">{option.label}</ToggleGroupItem>)}
-      </ToggleGroup>
+      <SegmentedControl options={ranges} value={range} aria-label="消费榜时间范围" onValueChange={onRangeChange} />
     </CardHeader>
     <CardContent><StableRegion phase={`${range}:${pending ? 'pending' : 'ready'}`} busy={loading} contentClassName="flex flex-col gap-4">
       <ErrorNotice message={message} />

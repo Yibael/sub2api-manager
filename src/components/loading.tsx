@@ -52,6 +52,10 @@ export function DirectorySkeleton({ rows = 4 }: { rows?: number }) {
   return <div role="status" aria-label="正在读取账号目录">{Array.from({ length: rows }, (_, index) => <div key={index} className="directory-row" aria-hidden="true"><Skeleton className="size-[39px] shrink-0" /><div className="directory-info flex flex-col gap-2"><div className="flex items-center justify-between gap-3"><Skeleton className="h-4 w-28" /><Skeleton className="h-5 w-20" /></div><div className="flex flex-wrap gap-1.5"><Skeleton className="h-5 w-16" /><Skeleton className="h-5 w-14" /><Skeleton className="h-5 w-8" /></div></div><div className="directory-actions"><Skeleton className="h-11 w-10 md:h-10" /><Skeleton className="h-11 w-20 md:h-10" /><Skeleton className="h-11 w-10 md:h-10" /></div></div>)}</div>
 }
 
+export function GroupDirectorySkeleton() {
+  return <div className="flex flex-col gap-5" role="status" aria-label="正在读取分组">{Array.from({ length: 4 }, (_, index) => <div key={index} className="flex items-center justify-between gap-4"><div className="flex flex-1 flex-col gap-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-36" /></div><Skeleton className="h-6 w-14" /><Skeleton className="h-8 w-20" /></div>)}</div>
+}
+
 export function DetailSkeleton({ cycle = true }: { cycle?: boolean }) {
   return <div className="page-stack" role="status" aria-label="正在读取账号详情">
     <Card><CardHeader><div className="flex items-center gap-3"><Skeleton className="size-[39px] shrink-0" /><div className="flex flex-col gap-2"><CardTitle>运行状态</CardTitle><Skeleton className="h-4 w-24" /></div></div></CardHeader><CardContent><div className="detail-metrics">{['当前并发 / 上限', '今日请求', '今日 Token'].map(label => <div key={label}><p>{label}</p><strong><LoadingValue loading>—</LoadingValue></strong></div>)}</div><Skeleton className="mt-5 h-10 w-28" /></CardContent></Card>

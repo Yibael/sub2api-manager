@@ -4,8 +4,7 @@ import { ArrowDown, ArrowUp, ArrowUpRight, Pin, PinOff, Search, SlidersHorizonta
 import { toast } from 'sonner'
 import { useDirectory, useNow } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
-import { ErrorNotice, Money, ProviderMark, RefreshButton } from '@/components/common'
-import { ResourcesHeading } from '@/components/resources-heading'
+import { ErrorNotice, Money, ProviderMark } from '@/components/common'
 import { AccountBadges, AccountStatusBadges } from '@/components/account-badges'
 import { SubscriptionEditor } from '@/components/subscription-editor'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card'
@@ -36,7 +35,7 @@ export function AccountsPage() {
   }
   const missing = preferences.pins.filter(id => directory.data?.data && !accounts.some(a => a.id === id))
   const pending = !directory.data?.data && !directory.error && !directory.data?.error
-  return <div className="page-stack"><ResourcesHeading section="accounts" action={<RefreshButton busy={directory.isFetching} onClick={() => void directory.forceRefresh()} />} /><ErrorNotice message={directory.error?.message ?? directory.data?.error} />
+  return <div className="page-stack"><ErrorNotice message={directory.error?.message ?? directory.data?.error} />
     <div className="account-toolbar"><div className="search-box"><Search className="size-4" /><Input aria-label="搜索账号" placeholder="搜索名称、平台或账号 ID…" value={search} onChange={e => setSearch(e.target.value)} /></div><ToggleGroup type="single" value={filter} onValueChange={value => { if (value) setFilter(value) }} variant="outline"><ToggleGroupItem value="all">全部</ToggleGroupItem><ToggleGroupItem value="pinned">已关注</ToggleGroupItem><ToggleGroupItem value="oauth">OAuth</ToggleGroupItem></ToggleGroup></div>
     <Card><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />账号目录</span></CardTitle><CardDescription className="flex flex-wrap items-center gap-2"><Badge variant="secondary"><LoadingValue loading={pending}>{accounts.length}</LoadingValue> 个账号</Badge><Badge variant="outline">{preferences.pins.length} 个已关注</Badge></CardDescription></CardHeader><CardContent className="account-list"><StableRegion phase={pending ? 'pending' : 'ready'} busy={directory.isFetching}>{pending ? <DirectorySkeleton rows={Math.min(6, Math.max(4, preferences.pins.length))} /> : filtered.length ? filtered.map(account => {
       const pinned = preferences.pins.includes(account.id), subscription = preferences.subscriptions.find(s => s.accountId === account.id)
