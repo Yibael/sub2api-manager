@@ -2,10 +2,14 @@ import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 import tailwindcss from '@tailwindcss/vite'
 import { fileURLToPath, URL } from 'node:url'
+import { readFileSync } from 'node:fs'
 import { VitePWA } from 'vite-plugin-pwa'
+
+const { version } = JSON.parse(readFileSync(new URL('./package.json', import.meta.url), 'utf8'))
 
 // https://vite.dev/config/
 export default defineConfig({
+  define: { __APP_VERSION__: JSON.stringify(version) },
   plugins: [react(), tailwindcss(), VitePWA({
     registerType: 'prompt',
     includeAssets: ['favicon.svg', 'apple-touch-icon.png'],
