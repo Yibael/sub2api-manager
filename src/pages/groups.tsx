@@ -9,6 +9,7 @@ import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/com
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { Input } from '@/components/ui/input'
+import { Separator } from '@/components/ui/separator'
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectGroup, SelectItem } from '@/components/ui/select'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { providerNames } from '../../shared/domain'
@@ -39,7 +40,7 @@ export function GroupsPage() {
     <div className="account-toolbar"><div className="search-box"><Search /><Input aria-label="搜索分组" placeholder="搜索名称、平台或分组 ID…" value={search} onChange={event => setSearch(event.target.value)} /></div>
       <Select value={platform} onValueChange={setPlatform}><SelectTrigger aria-label="筛选分组平台" className="w-full sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部平台</SelectItem>{platforms.map(value => <SelectItem key={value} value={value}>{providerNames[value] ?? value}</SelectItem>)}</SelectGroup></SelectContent></Select>
     </div>
-    <Card ref={directoryRef} className="group-directory"><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />分组目录</span></CardTitle><CardDescription><Badge variant="secondary"><LoadingValue loading={pending}>{groups.length}</LoadingValue> 个分组</Badge></CardDescription></CardHeader>
+    <Card ref={directoryRef} className="directory-card group-directory"><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />分组目录</span></CardTitle><CardDescription><Badge variant="secondary"><LoadingValue loading={pending}>{groups.length}</LoadingValue> 个分组</Badge></CardDescription></CardHeader><Separator />
       <CardContent><StableRegion phase={pending ? 'pending' : 'ready'} busy={directory.isFetching}>
         {pending ? <GroupDirectorySkeleton /> : filtered.length ? <>
           <div className="group-list">{filtered.map(group => <div key={group.id} className="group-row">

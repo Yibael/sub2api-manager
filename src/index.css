@@ -252,8 +252,12 @@ button:not(:disabled), a { cursor: pointer; }
 .account-toolbar { display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 16px; min-width: 0; }
 .search-box { display: flex; gap: 8px; align-items: center; flex: 1; max-width: 420px; min-width: 0; }
 .search-box > svg { width: 16px; height: 16px; color: var(--muted-foreground); flex-shrink: 0; }
+.directory-card { gap: 0; }
+.directory-card > [data-slot=card-header] { padding-bottom: var(--card-spacing); }
+.directory-card > [data-slot=card-content] { padding-top: var(--card-spacing); }
 .account-list { padding-inline: 0; }
 .directory-row { display: grid; grid-template-columns: 40px minmax(0, 1fr); align-items: center; gap: 12px; padding: 20px var(--app-card-padding); border-top: 1px solid var(--border); }
+.directory-card .directory-row:first-child { border-top: 0; padding-top: 0; }
 .directory-info { flex: 1; min-width: 0; }
 .directory-name { font-size: var(--app-body); font-weight: 600; overflow-wrap: anywhere; }
 .subscription-summary { display: block; color: var(--muted-foreground); font-size: var(--app-meta); line-height: 1.6; margin-top: 8px; }
