@@ -7,6 +7,25 @@ beforeEach(() => { vi.useFakeTimers(); vi.setSystemTime(new Date('2026-10-04T00:
 afterEach(() => { focusManager.setFocused(undefined); onlineManager.setOnline(true); vi.useRealTimers() })
 
 describe('manual account benefit reads', () => {
+  it('keeps a one-time directory read running when background entry cancels polling work', async () => {
+    const client = new QueryClient()
+    let finish!: (value: string) => void, manualSignal!: AbortSignal, pollSignal!: AbortSignal
+    const manual = new QueryObserver(client, manualQueryOptions(['groups', 'workspace'], signal => {
+      manualSignal = signal
+      return new Promise<string>(resolve => { finish = resolve })
+    }))
+    const polling = new QueryObserver(client, { queryKey: ['status', 'workspace'], enabled: false, retry: false,
+      meta: { poll: true }, queryFn: ({ signal }) => { pollSignal = signal; return new Promise<string>(() => {}) } })
+    const stopManual = manual.subscribe(() => {}), stopPolling = polling.subscribe(() => {})
+    const read = manual.refetch(), poll = polling.refetch()
+    await client.cancelQueries({ predicate: query => query.meta?.poll === true })
+    expect(pollSignal.aborted).toBe(true)
+    expect(manualSignal.aborted).toBe(false)
+    finish('directory snapshot')
+    await Promise.all([read, poll])
+    expect(manual.getCurrentResult().data).toBe('directory snapshot')
+    stopManual(); stopPolling(); client.clear()
+  })
   it('reads once explicitly and never repeats on timers, focus, reconnect, invalidation or observer remount', async () => {
     const client = new QueryClient({ defaultOptions: { queries: { retry: true, refetchOnWindowFocus: 'always', refetchOnReconnect: 'always' } } })
     client.mount()

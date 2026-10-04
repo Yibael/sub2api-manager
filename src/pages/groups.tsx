@@ -1,6 +1,7 @@
 import { useState } from 'react'
 import { Check, Pause, Search, SlidersHorizontal } from 'lucide-react'
 import { useGroups } from '@/lib/groups'
+import { useNearViewport } from '@/lib/near-viewport'
 import { EmptyState, ErrorNotice, ProviderMark } from '@/components/common'
 import { GroupRateEditor } from '@/components/group-rate-editor'
 import { StableRegion, LoadingValue, GroupDirectorySkeleton } from '@/components/loading'
@@ -26,7 +27,8 @@ function GroupStatus({ group }: { group: Group }) {
 }
 
 export function GroupsPage() {
-  const directory = useGroups(), [search, setSearch] = useState(''), [platform, setPlatform] = useState('all')
+  const { ref: directoryRef, near } = useNearViewport()
+  const directory = useGroups(near), [search, setSearch] = useState(''), [platform, setPlatform] = useState('all')
   const [editing, setEditing] = useState<Group | null>(null)
   const groups = directory.data?.data ?? [], message = directory.error?.message ?? directory.data?.error
   const pending = !directory.data?.data && !message
@@ -37,7 +39,7 @@ export function GroupsPage() {
     <div className="account-toolbar"><div className="search-box"><Search /><Input aria-label="搜索分组" placeholder="搜索名称、平台或分组 ID…" value={search} onChange={event => setSearch(event.target.value)} /></div>
       <Select value={platform} onValueChange={setPlatform}><SelectTrigger aria-label="筛选分组平台" className="w-full sm:w-40"><SelectValue /></SelectTrigger><SelectContent><SelectGroup><SelectItem value="all">全部平台</SelectItem>{platforms.map(value => <SelectItem key={value} value={value}>{providerNames[value] ?? value}</SelectItem>)}</SelectGroup></SelectContent></Select>
     </div>
-    <Card className="group-directory"><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />分组目录</span></CardTitle><CardDescription><Badge variant="secondary"><LoadingValue loading={pending}>{groups.length}</LoadingValue> 个分组</Badge></CardDescription></CardHeader>
+    <Card ref={directoryRef} className="group-directory"><CardHeader><CardTitle><span className="flex items-center gap-2"><SlidersHorizontal className="size-4" />分组目录</span></CardTitle><CardDescription><Badge variant="secondary"><LoadingValue loading={pending}>{groups.length}</LoadingValue> 个分组</Badge></CardDescription></CardHeader>
       <CardContent><StableRegion phase={pending ? 'pending' : 'ready'} busy={directory.isFetching}>
         {pending ? <GroupDirectorySkeleton /> : filtered.length ? <>
           <div className="group-list">{filtered.map(group => <div key={group.id} className="group-row">

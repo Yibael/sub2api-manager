@@ -1,25 +1,13 @@
 import { useEffect, useMemo, useState } from 'react'
-import { api, queryClient } from './api'
+import { api } from './api'
+import { useForeground } from './foreground'
 import { useWorkspace } from './preferences'
 import { useCompletionQuery } from './completion-query'
 import { refreshCountdown } from './refresh-countdown'
 import { dateInZone, type Account, type Sample, type SpendingRow, type TodayStats, type Usage } from '../../shared/domain'
 import type { MoneyAmount } from '../../shared/money'
 
-export function useForeground() {
-  const [visible, setVisible] = useState(document.visibilityState === 'visible')
-  useEffect(() => {
-    const change = () => {
-      const shown = document.visibilityState === 'visible'
-      setVisible(shown)
-      if (!shown) void queryClient.cancelQueries({ predicate: query => query.meta?.poll === true })
-      else void queryClient.invalidateQueries({ queryKey: ['config'] })
-    }
-    document.addEventListener('visibilitychange', change)
-    return () => document.removeEventListener('visibilitychange', change)
-  }, [])
-  return visible
-}
+export { useForeground } from './foreground'
 export function useNow() {
   const foreground = useForeground()
   const [now, setNow] = useState(() => Date.now())

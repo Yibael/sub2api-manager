@@ -2,6 +2,7 @@ import { useState } from 'react'
 import { CircleAlert } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useManualQuery } from '@/lib/manual-query'
+import { useNearViewport } from '@/lib/near-viewport'
 import { useWorkspace } from '@/lib/preferences'
 import { ErrorNotice, RefreshButton } from '@/components/common'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -25,10 +26,12 @@ export function AccountBenefitsCard({ account, now }: { account: Account; now: n
   const { config, preferences } = useWorkspace()
   const [initialBenefits] = useState(account.benefits!)
   const [showExpirations, setShowExpirations] = useState(false)
+  const { ref: quotaRef, near: quotaNear } = useNearViewport<HTMLElement>()
+  const { ref: referralRef, near: referralNear } = useNearViewport<HTMLElement>()
   const quota = useManualQuery<QuotaBenefits>(['benefits', config.instanceId, account.id, 'quota'],
-    (force, signal) => api(`/accounts/${account.id}/benefits/quota`, force ? {} : undefined, signal))
+    (force, signal) => api(`/accounts/${account.id}/benefits/quota`, force ? {} : undefined, signal), quotaNear)
   const referrals = useManualQuery<ReferralBenefits>(['benefits', config.instanceId, account.id, 'referrals'],
-    (force, signal) => api(`/accounts/${account.id}/benefits/referrals`, force ? {} : undefined, signal))
+    (force, signal) => api(`/accounts/${account.id}/benefits/referrals`, force ? {} : undefined, signal), referralNear)
   const quotaData = quota.data ?? initialBenefits, referralData = referrals.data ?? initialBenefits
   const expirations = quotaData.resetCredits.data?.expiresAt.filter(time => Date.parse(time) > now) ?? []
   const date = (time: string | number) => new Intl.DateTimeFormat('zh-CN', { timeZone: preferences.timeZone,
@@ -42,7 +45,7 @@ export function AccountBenefitsCard({ account, now }: { account: Account; now: n
       <CardDescription>点击各项刷新按钮查询最新信息</CardDescription>
     </CardHeader>
     <CardContent className="benefits-content">
-      <section className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-quota-${account.id}`}>
+      <section ref={quotaRef} className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-quota-${account.id}`}>
         <div className="benefit-heading">
           <h3 id={`benefits-quota-${account.id}`}>重置卡与 Credits</h3>
           <RefreshButton mode="icon" busy={quota.isFetching} label="查询最新重置卡与 Credits" onClick={() => void quota.forceRefresh()} />
@@ -62,7 +65,7 @@ export function AccountBenefitsCard({ account, now }: { account: Account; now: n
         <BenefitNotices error={quota.error} samples={[["重置卡", quotaData.resetCredits], ["Credits", quotaData.credits]]} />
       </section>
       <Separator orientation="vertical" className="benefits-divider" />
-      <section className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-referrals-${account.id}`}>
+      <section ref={referralRef} className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-referrals-${account.id}`}>
         <Separator className="benefits-mobile-divider" />
         <div className="benefit-heading">
           <h3 id={`benefits-referrals-${account.id}`}>邀请</h3>

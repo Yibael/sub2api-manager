@@ -1,25 +1,14 @@
-import { useQuery } from '@tanstack/react-query'
-import { useState } from 'react'
-import { toast } from 'sonner'
 import { api, pageSession, queryClient } from './api'
 import { useWorkspace } from './preferences'
-import { useForeground } from './monitor'
-import { forceQuery } from './completion-query'
+import { useManualQuery } from './manual-query'
 import type { Sample } from '../../shared/domain'
 import type { Group } from '../../shared/groups'
 
-export function useGroups() {
-  const { config } = useWorkspace(), visible = useForeground()
-  const [forcing, setForcing] = useState(false)
+export function useGroups(enabled: boolean) {
+  const { config } = useWorkspace()
   const key = ['groups', config.instanceId]
-  const query = useQuery<Sample<Group[]>>({ queryKey: key, queryFn: ({ signal }) => api('/groups', undefined, signal), enabled: visible,
-    staleTime: 60_000, retry: false, refetchOnWindowFocus: false, meta: { poll: true } })
-  async function refresh() {
-    setForcing(true)
-    try { return await forceQuery<Sample<Group[]>>(queryClient, key, signal => api('/groups?force=true', undefined, signal)) }
-    catch (error) { toast.error((error as Error).message) }
-    finally { setForcing(false) }
-  }
+  const query = useManualQuery<Sample<Group[]>>(key,
+    (force, signal) => api(`/groups${force ? '?force=true' : ''}`, undefined, signal), enabled)
   async function saved(group: Group) {
     const epoch = pageSession.epoch
     await queryClient.cancelQueries({ queryKey: key })
@@ -29,5 +18,5 @@ export function useGroups() {
     } : undefined)
     void queryClient.invalidateQueries({ queryKey: key })
   }
-  return { ...query, isFetching: query.isFetching || forcing, refresh, saved }
+  return { ...query, refresh: query.forceRefresh, saved }
 }
