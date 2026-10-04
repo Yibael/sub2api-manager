@@ -4,7 +4,8 @@ import { sumMoney } from '../../shared/money'
 import { rankingsIncludeAdmin } from '../../shared/preferences'
 import { useMemo, useState } from 'react'
 import { useWorkspace } from '@/lib/preferences'
-import { useMonitor } from '@/lib/monitor'
+import { useStatistics } from '@/lib/statistics'
+import { useNearViewport } from '@/lib/near-viewport'
 import { useUserRankings, useModelRankings } from '@/lib/rankings'
 import { AccountBadges } from '@/components/account-badges'
 import { UserRankingCard } from '@/components/user-ranking'
@@ -18,11 +19,15 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 
 export function StatisticsPage() {
-  const { preferences } = useWorkspace(), monitor = useMonitor(undefined, true, 'statistics')
+  const { preferences } = useWorkspace()
+  const { ref: subscriptionRef, near: subscriptionNear } = useNearViewport<HTMLElement>()
+  const { ref: userRef, near: userNear } = useNearViewport<HTMLDivElement>()
+  const { ref: modelRef, near: modelNear } = useNearViewport<HTMLDivElement>()
+  const monitor = useStatistics(subscriptionNear)
   const [range, setRange] = useState<RankingRange>('today')
   const [modelRange, setModelRange] = useState<ModelRankingRange>('today')
-  const rankings = useUserRankings(monitor.now, range)
-  const models = useModelRankings(monitor.now, modelRange)
+  const rankings = useUserRankings(monitor.now, range, userNear)
+  const models = useModelRankings(monitor.now, modelRange, modelNear)
   const { period } = rankings
   const rangeLabel = range === 'hour' ? `${period.period} 至今` : period.startDate === period.endDate ? period.endDate : `${period.startDate} — ${period.endDate}`
   const modelRangeLabel = models.period.startDate === models.period.endDate ? models.period.endDate : `${models.period.startDate} — ${models.period.endDate}`
@@ -32,10 +37,10 @@ export function StatisticsPage() {
     <section className="page-section" aria-labelledby="global-statistics-heading">
       <SectionHeading id="global-statistics-heading" title="全站榜单" description="按实际消费排序"
         meta={<Badge variant="secondary"><ShieldCheck data-icon="inline-start" />{rankingsIncludeAdmin(preferences) ? '包含 Admin' : '已排除 Admin'}</Badge>} />
-      <UserRankingCard title="消费榜" description={`${rangeLabel}${period.timeZone === preferences.timeZone ? '' : ` · ${period.timeZone}`}`} sample={rankings.data} error={rankings.error?.message} loading={rankings.isFetching} currency={preferences.actualCurrency} range={range} onRangeChange={setRange} onRefresh={() => void rankings.forceRefresh()} />
-      <ModelRankingCard description={modelRangeLabel} sample={models.data} error={models.error?.message} loading={models.isFetching} currency={preferences.actualCurrency} range={modelRange} onRangeChange={setModelRange} onRefresh={() => void models.forceRefresh()} />
+      <div ref={userRef}><UserRankingCard title="消费榜" description={`${rangeLabel}${period.timeZone === preferences.timeZone ? '' : ` · ${period.timeZone}`}`} sample={rankings.data} error={rankings.error?.message} loading={rankings.isFetching} currency={preferences.actualCurrency} range={range} onRangeChange={setRange} onRefresh={() => void rankings.forceRefresh()} /></div>
+      <div ref={modelRef}><ModelRankingCard description={modelRangeLabel} sample={models.data} error={models.error?.message} loading={models.isFetching} currency={preferences.actualCurrency} range={modelRange} onRangeChange={setModelRange} onRefresh={() => void models.forceRefresh()} /></div>
     </section>
-    <section className="page-section" aria-labelledby="subscription-statistics-heading">
+    <section ref={subscriptionRef} className="page-section" aria-labelledby="subscription-statistics-heading">
       <SectionHeading id="subscription-statistics-heading" title="订阅与成本" description="仅汇总已关注且配置订阅的账号"
         action={monitor.subscriptions.length > 0 && <RefreshButton mode="icon" label="刷新订阅与成本" busy={monitor.spending.isFetching} onClick={() => void monitor.spending.forceRefresh()} />} />
       <ErrorNotice message={monitor.spending.error?.message ?? monitor.status.error?.message} />

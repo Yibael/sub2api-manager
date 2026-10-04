@@ -81,7 +81,7 @@ Passkey 使用同一个 HTTPS 入口和 `APP_ORIGIN`，无需额外端口或代�
 - 构建阶段安装完整依赖并进行类型检查、前端构建和服务端打包。
 - 运行阶段不复制 `node_modules`、测试数据或源码目录，使用非 root 的 `bun` 用户。
 - 根文件系统只读，`/tmp` 使用临时内存文件系统，`/app/data` 为可写命名卷。
-- 默认卷 `sub2api-manager_app-data` 保存 `workspace.json`，包含共享配置、稳定工作空间 ID 和 Passkey 公钥凭证；旧 `intervals.json` 仅用于首次迁移和旧接口兼容。更改 Compose 项目名会使用不同卷。不要对需要保留的部署执行 `down --volumes`。
+- 默认卷 `sub2api-manager_app-data` 保存 `manager.sqlite`（权益快照与用卡记录）和 `workspace.json`，包含共享配置、稳定工作空间 ID 和 Passkey 公钥凭证；旧 `intervals.json` 仅用于首次迁移和旧接口兼容。更改 Compose 项目名会使用不同卷。不要对需要保留的部署执行 `down --volumes`。
 - 关注账号、订阅成本、续费日、货币符号、统计口径和刷新间隔在服务端保存；主题与金额隐藏留在各设备浏览器。
 - 更新前备份数据卷中的 `workspace.json`。配置导出不包含 Passkey；恢复该文件才能保留完整工作空间和凭证。更换 Admin Key 不改变工作空间 ID。
 - 登录会话、共享缓存和冷却状态保存在进程内存中，重建容器后需要重新登录。使用一个应用实例，不要通过多副本绕开共享限流。
@@ -134,3 +134,5 @@ Compose 使用 `build: .`，默认读取项目根目录的 Dockerfile，并自�
 本次 Passkey、配置同步与页面锁定改动通过 84 项 Vitest 测试、类型检查、Lint、前端生产构建和服务端打包；使用隔离测试数据检查内置浏览器交互与 Bun 打包服务的启动、登录、Passkey 验证和持久化恢复。
 
 另使用现有 Dockerfile 在 `linux/arm64` 构建镜像，并在禁用网络、非 root、只读根文件系统的隔离容器中验证密码登录、Cookie 与页面验证令牌绑定、真实 ES256 Passkey 注册与认证、页面锁定、过期锁定请求隔离、健康检查及重建后配置与 Passkey 保留。使用独立数据卷及测试凭据；未连接真实上游，实际 HTTPS 入口、`linux/amd64` 和系统生物识别注册仍需在部署环境验收。
+
+备份时停止服务后复制整个 DATA_DIR，包含 workspace.json、manager.sqlite 及尚未合并的 WAL 文件。升级会自动创建 SQLite 文件并迁移表结构；保留原数据卷即可恢复权益时间与用卡记录。

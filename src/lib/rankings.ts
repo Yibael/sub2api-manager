@@ -1,26 +1,26 @@
+import { useState } from 'react'
 import { api } from './api'
-import { useCompletionQuery } from './completion-query'
-import { useForeground } from './monitor'
+import { useManualQuery } from './manual-query'
 import { useWorkspace } from './preferences'
 import { rankingsIncludeAdmin } from '../../shared/preferences'
-import { userRankingPeriod, rankingInterval, type RankingRange, type Sample, type UserRanking, type ModelRankingRange, type ModelRanking } from '../../shared/domain'
+import { userRankingPeriod, type RankingRange, type Sample, type UserRanking, type ModelRankingRange, type ModelRanking } from '../../shared/domain'
 
-export function useUserRankings(now: number, range: RankingRange) {
-  const { config, preferences } = useWorkspace(), visible = useForeground()
+export function useUserRankings(now: number, range: RankingRange, near = true) {
+  const { config, preferences } = useWorkspace()
+  const [enteredAt] = useState(now)
   const body = { range, timeZone: preferences.timeZone, includeAdmin: rankingsIncludeAdmin(preferences) }
-  const period = userRankingPeriod(range, new Date(now), preferences.timeZone, config.serverTimeZone)
-  const query = useCompletionQuery<Sample<UserRanking>>(['user-rankings', config.instanceId, body, period.period], rankingInterval(config.intervals), visible,
-    (force, signal) => api('/spending/rankings', { ...body, force }, signal))
-  const matches = query.data?.data?.range === range && query.data.data.period === period.period
-  return { ...query, period, data: query.data ? matches ? query.data : { ...query.data, data: null, updatedAt: null } : undefined }
+  const query = useManualQuery<Sample<UserRanking>>(['user-rankings', config.instanceId, body],
+    (force, signal) => api('/spending/rankings', { ...body, force }, signal), near)
+  // Date/hour changes never create an automatic query. A manual response owns its period.
+  const period = query.data?.data ?? userRankingPeriod(range, new Date(enteredAt), preferences.timeZone, config.serverTimeZone)
+  return { ...query, period }
 }
-
-export function useModelRankings(now: number, range: ModelRankingRange) {
-  const { config, preferences } = useWorkspace(), visible = useForeground()
+export function useModelRankings(now: number, range: ModelRankingRange, near = true) {
+  const { config, preferences } = useWorkspace()
+  const [enteredAt] = useState(now)
   const body = { range, timeZone: preferences.timeZone, includeAdmin: rankingsIncludeAdmin(preferences) }
-  const period = userRankingPeriod(range, new Date(now), preferences.timeZone, preferences.timeZone)
-  const query = useCompletionQuery<Sample<ModelRanking>>(['model-rankings', config.instanceId, body, period.period], rankingInterval(config.intervals), visible,
-    (force, signal) => api('/spending/models', { ...body, force }, signal))
-  const matches = query.data?.data?.range === range && query.data.data.period === period.period
-  return { ...query, period, data: query.data ? matches ? query.data : { ...query.data, data: null, updatedAt: null } : undefined }
+  const query = useManualQuery<Sample<ModelRanking>>(['model-rankings', config.instanceId, body],
+    (force, signal) => api('/spending/models', { ...body, force }, signal), near)
+  const period = query.data?.data ?? userRankingPeriod(range, new Date(enteredAt), preferences.timeZone, preferences.timeZone)
+  return { ...query, period }
 }

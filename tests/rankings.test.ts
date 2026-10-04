@@ -209,7 +209,7 @@ describe('selectable upstream user consumption rankings', () => {
     expect(calls('dashboard/users-trend')).toHaveLength(range === 'hour' ? 1 : 0)
     expect(calls('users')).toHaveLength(1)
   })
-  it('measures the 30-second minimum cache interval from completion and performs no background refresh', async () => {
+  it('shares snapshots for 30 seconds from completion without a refresh scheduler', async () => {
     let release!: () => void
     const pending = new Promise<void>(resolve => { release = resolve })
     const { monitor, calls } = setup(async path => { if (path.startsWith('dashboard/')) await pending })

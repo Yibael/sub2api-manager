@@ -11,6 +11,8 @@ import { GroupError } from './groups'
 import { BenefitsError } from './benefits'
 import { AutoResetError } from './auto-reset'
 import { autoResetRequestSchema } from '../shared/auto-reset'
+import { ResetCardError } from './reset-card'
+import { resetCardReviewSchema } from '../shared/reset-card'
 import { groupRateRequestSchema } from '../shared/groups'
 
 export interface AppOptions {
@@ -59,8 +61,8 @@ export function createApp(options: AppOptions) {
       }
     })
     .onError(({ code, error, set }) => {
-      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
-      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
+      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError || error instanceof ResetCardError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
+      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError || error instanceof ResetCardError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
     })
     .get('/config', ({ cookie, request }): PublicConfig => {
       const auth = authenticated(cookie[sessionName].value, pageToken(request))
@@ -148,6 +150,13 @@ export function createApp(options: AppOptions) {
       return { ok: true }
     }, { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
     .put('/accounts/:id/auto-reset', ({ params, body, cookie }) => options.monitor!.accountAutoReset.confirm(params.id, body.token, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
+    .get('/accounts/:id/reset-card/operation', ({ params }) => ({ operation: options.monitor!.accountResetCards.latest(params.id) }), { params: groupParams, beforeHandle: requireMonitor })
+    .post('/accounts/:id/reset-card/preview', ({ params, cookie }) => options.monitor!.accountResetCards.prepare(params.id, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: z.object({}).strict(), beforeHandle: requireMonitor })
+    .post('/accounts/:id/reset-card/cancel', ({ params, body, cookie }) => {
+      options.monitor!.accountResetCards.cancel(params.id, body.token, sessionKey(cookie[sessionName].value as string)); return { ok: true }
+    }, { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
+    .post('/accounts/:id/reset-card/confirm', ({ params, body, cookie }) => options.monitor!.accountResetCards.confirm(params.id, body.token, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
+    .post('/accounts/:id/reset-card/acknowledge', ({ params, body }) => options.monitor!.accountResetCards.acknowledge(params.id, body.operationId), { params: groupParams, body: resetCardReviewSchema, beforeHandle: requireMonitor })
     .get('/groups', ({ query }) => options.monitor!.groupManagement.list(query.force === 'true'), { beforeHandle: requireMonitor })
     .post('/groups/:id/rate/preview', ({ params, body, cookie }) => options.monitor!.groupManagement.prepare(params.id, body.rateMultiplier, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupRateRequestSchema, beforeHandle: requireMonitor })
     .post('/groups/:id/rate/cancel', ({ params, body, cookie }) => {
@@ -159,6 +168,7 @@ export function createApp(options: AppOptions) {
     .post('/today', ({ body }) => options.monitor!.today(body.ids, body.force), { body: idsSchema, beforeHandle: requireMonitor })
     .post('/quota', ({ body }) => options.monitor!.quota(body.ids, body.force), { body: idsSchema, beforeHandle: requireMonitor })
     .post('/spending', ({ body }) => options.monitor!.spending(body), { body: spendingRequestSchema, beforeHandle: requireMonitor })
+    .post('/statistics/spending', ({ body }) => options.monitor!.spending(body, true), { body: spendingRequestSchema, beforeHandle: requireMonitor })
     .post('/spending/today', ({ body }) => options.monitor!.dailySpending(body), { body: dailySpendingRequestSchema, beforeHandle: requireMonitor })
     .post('/spending/rankings', ({ body }) => options.monitor!.rankings(body), { body: userRankingsRequestSchema, beforeHandle: requireMonitor })
     .post('/spending/models', ({ body }) => options.monitor!.modelRankings(body), { body: modelRankingsRequestSchema, beforeHandle: requireMonitor })

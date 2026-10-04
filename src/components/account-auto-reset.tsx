@@ -5,7 +5,6 @@ import { useWorkspace } from '@/lib/preferences'
 import { useCompletionQuery } from '@/lib/completion-query'
 import { useForeground } from '@/lib/monitor'
 import { ErrorNotice } from '@/components/common'
-import { Card, CardContent, CardHeader, CardTitle, CardAction } from '@/components/ui/card'
 import { Badge } from '@/components/ui/badge'
 import { Spinner } from '@/components/ui/spinner'
 import { Switch } from '@/components/ui/switch'
@@ -14,9 +13,9 @@ import { AlertDialog, AlertDialogContent, AlertDialogHeader, AlertDialogTitle, A
 import { formatResetThreshold, type AutoResetConfig, type AutoResetPreview } from '../../shared/auto-reset'
 import type { Account, Sample } from '../../shared/domain'
 
-export function AccountAutoResetCard({ account, stale }: { account: Account; stale: boolean }) {
+export function AccountAutoResetControls({ account, stale, near }: { account: Account; stale: boolean; near: boolean }) {
   const { config } = useWorkspace(), visible = useForeground()
-  const query = useCompletionQuery<Sample<AutoResetConfig>>(['auto-reset', config.instanceId, account.id], config.intervals.status, visible,
+  const query = useCompletionQuery<Sample<AutoResetConfig>>(['auto-reset', config.instanceId, account.id], config.intervals.status, visible && near,
     (_, signal) => api(`/accounts/${account.id}/auto-reset`, undefined, signal), { refetchOnMount: 'always' })
   const [preview, setPreview] = useState<AutoResetPreview | null>(null)
   const [busy, setBusy] = useState<'preview' | 'save' | null>(null), [expired, setExpired] = useState(false)
@@ -84,22 +83,21 @@ export function AccountAutoResetCard({ account, stale }: { account: Account; sta
       if (pageSession.epoch === epoch) await refreshSaved(epoch).catch(() => {})
     } finally { lock.current = false; if (active.current) setBusy(null) }
   }
-  return <><Card><CardHeader><CardTitle>自动使用重置卡</CardTitle><CardAction><Badge variant="secondary">{loading ? '读取中' : unavailable ? '状态待更新' : current ? current.enabled ? '已开启' : '已关闭' : '不支持'}</Badge></CardAction></CardHeader>
-    <CardContent className="flex flex-col gap-5">
+  return <><div className="flex flex-col gap-4">
       {current || loading || unavailable ? <>
         <Field orientation="horizontal" data-disabled={!!busy || loading || unavailable}>
-          <FieldContent><FieldTitle id={`auto-reset-label-${account.id}`}>自动用卡</FieldTitle><FieldDescription id={`auto-reset-desc-${account.id}`}>达到任一阈值时，自动用卡恢复额度。</FieldDescription></FieldContent>
+          <FieldContent><FieldTitle id={`auto-reset-label-${account.id}`}>自动用卡 <Badge variant="muted">{loading ? '读取中' : unavailable ? '待更新' : current?.enabled ? '开启' : '关闭'}</Badge></FieldTitle><FieldDescription id={`auto-reset-desc-${account.id}`}>达到任一阈值时恢复额度。</FieldDescription></FieldContent>
           <div className="flex min-w-8 items-center justify-center" aria-busy={loading || busy === 'preview'}>
             {loading || busy === 'preview' ? <Spinner aria-label={loading ? '正在读取自动用卡配置' : '正在检查变更'} /> : current
               ? <Switch id={`auto-reset-${account.id}`} aria-labelledby={`auto-reset-label-${account.id}`} aria-describedby={`auto-reset-desc-${account.id}`} checked={current.enabled} disabled={!!busy || !!preview || unavailable} onCheckedChange={enabled => void prepare(enabled)} />
               : <span className="text-sm text-muted-foreground" aria-label="自动用卡状态未知">—</span>}
           </div>
         </Field>
-        <dl className="data-list"><div><dt>5 小时触发阈值</dt><dd className="tabular-nums">{current ? formatResetThreshold(current.threshold5h) : '—'}</dd></div><div><dt>7 日触发阈值</dt><dd className="tabular-nums">{current ? formatResetThreshold(current.threshold7d) : '—'}</dd></div></dl>
+        <div className="flex flex-wrap gap-2"><Badge variant="outline">5 小时阈值 {current ? formatResetThreshold(current.threshold5h) : '—'}</Badge><Badge variant="outline">7 日阈值 {current ? formatResetThreshold(current.threshold7d) : '—'}</Badge></div>
         {unavailable && <ErrorNotice message={readError ?? '账号状态读取失败，请刷新后再修改自动用卡配置。'} />}
       </> : <p className="text-sm text-muted-foreground">仅 OpenAI OAuth 母账号支持自动使用重置卡。</p>}
       <ErrorNotice message={error} />
-    </CardContent></Card>
+    </div>
     <AlertDialog open={!!preview} onOpenChange={open => { if (!open) cancel() }}><AlertDialogContent>
       <AlertDialogHeader><AlertDialogTitle>确认{preview?.enabled ? '开启' : '关闭'}自动使用重置卡？</AlertDialogTitle><AlertDialogDescription>{preview?.enabled ? '开启后，Sub2API 会按下列阈值自动消耗可用重置卡恢复额度。' : '关闭后，Sub2API 将停止为此账号发起新的自动用卡操作。已经发出的用卡请求可能仍会完成。'}</AlertDialogDescription></AlertDialogHeader>
       {preview && <dl className="data-list"><div><dt>账号</dt><dd className="min-w-0 break-words">{preview.account.name} · #{preview.account.id}</dd></div><div><dt>自动用卡</dt><dd>{preview.current.enabled ? '开启' : '关闭'} → {preview.enabled ? '开启' : '关闭'}</dd></div><div><dt>5 小时触发阈值</dt><dd>{formatResetThreshold(preview.current.threshold5h)}</dd></div><div><dt>7 日触发阈值</dt><dd>{formatResetThreshold(preview.current.threshold7d)}</dd></div></dl>}

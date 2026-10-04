@@ -9,7 +9,7 @@ import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { overviewTotals } from '@/lib/overview'
 
-export function spendingTotal(monitor: MonitorData, field: 'today' | 'spending') {
+export function spendingTotal(monitor: Pick<MonitorData, 'spending' | 'subscriptions'>, field: 'today' | 'spending') {
   const rows = monitor.spending.data?.rows
   if (!rows?.length || rows.length !== monitor.subscriptions.length || rows.some(row => row[field].data === null || row[field].error)) return null
   return sumMoney(rows.map(row => row[field].data!))

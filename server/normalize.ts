@@ -39,10 +39,26 @@ export function normalizeReferrals(value: unknown): ReferralCapacity | null {
 export function normalizeBenefits(extra: Raw): AccountBenefits {
   const credits = object(extra.codex_credits_snapshot), referrals = object(extra.codex_referral_snapshot)
   return {
-    resetCredits: benefitSample(normalizeResetCredits(extra.codex_reset_credit_snapshot)),
+    resetCredits: benefitSample(normalizeResetCredits(extra.codex_reset_credit_snapshot), fetchedAt(object(extra.codex_reset_credit_snapshot).fetched_at)),
     credits: benefitSample(normalizeCredits(credits.credits), fetchedAt(credits.fetched_at)),
     referrals: benefitSample(normalizeReferrals(referrals), fetchedAt(referrals.fetched_at)),
   }
+}
+
+/** The quota/refresh and reset-quota endpoints return WHAM windows directly. */
+export function normalizeOpenAIQuota(value: unknown): Usage {
+  const raw = object(value), limit = object(raw.rate_limit), queriedAt = fetchedAt(raw.fetched_at)
+  const windows: Quota[] = []
+  for (const [key, fallback] of [['primary_window', '5小时额度'], ['secondary_window', '7日额度']]) {
+    const window = object(limit[key]), percent = number(window.used_percent)
+    if (percent === null) continue
+    const resetAt = fetchedAt(window.reset_at)
+    const after = number(window.reset_after_seconds)
+    const time = resetAt ?? (queriedAt !== null && after !== null ? queriedAt + after * 1000 : null)
+    windows.push({ name: window.limit_window_seconds === 604800 ? '7日额度' : window.limit_window_seconds === 18000 ? '5小时额度' : fallback,
+      percent, resetsAt: time !== null && Number.isFinite(new Date(time).getTime()) ? new Date(time).toISOString() : null, used: null, limit: null })
+  }
+  return { windows, weeklyCost: null, estimatedWeeklyCost: null }
 }
 export function resetThreshold(value: unknown): number | null {
   const parsed = typeof value === 'number' ? value : typeof value === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) ? Number(value) : NaN

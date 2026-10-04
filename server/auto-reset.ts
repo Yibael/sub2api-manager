@@ -3,6 +3,7 @@ import type { Account } from '../shared/domain'
 import type { AutoResetPreview } from '../shared/auto-reset'
 import { normalizeAccount, object, resetThreshold, type Raw } from './normalize'
 import type { Upstream } from './upstream'
+import { AccountWriteLock } from './account-lock'
 
 export class AutoResetError extends Error {
   constructor(message: string, public readonly status = 400) { super(message) }
@@ -11,8 +12,7 @@ interface Confirmation extends AutoResetPreview { session: string }
 
 export class AutoReset {
   private confirmations = new Map<string, Confirmation>()
-  private busy = new Set<number>()
-  constructor(private readonly upstream: Upstream, private readonly invalidate: () => void) {}
+  constructor(private readonly upstream: Upstream, private readonly invalidate: () => void, private readonly lock = new AccountWriteLock()) {}
 
   private async read(id: number, signal: AbortSignal) {
     const raw = object(await this.upstream.request(`accounts/${id}`, { signal })), account = normalizeAccount(raw)
@@ -45,10 +45,8 @@ export class AutoReset {
     if (!entry || entry.session !== session || entry.account.id !== id) throw new AutoResetError('确认已失效，请重新检查变更', 409)
     this.confirmations.delete(token)
     if (entry.expiresAt <= Date.now()) throw new AutoResetError('确认已过期，请重新检查变更', 409)
-    if (this.busy.has(id)) throw new AutoResetError('此账号正在保存，请稍后重新检查', 409)
-    this.busy.add(id)
-    const signal = AbortSignal.timeout(30_000)
-    try {
+    return this.lock.run(id, async () => {
+      const signal = AbortSignal.timeout(30_000)
       const { raw, account, config } = await this.read(id, signal)
       if (account.name !== entry.account.name || config.enabled !== entry.current.enabled || config.threshold5h !== entry.current.threshold5h || config.threshold7d !== entry.current.threshold7d) {
         throw new AutoResetError('自动用卡配置已被修改，请重新检查后确认', 409)
@@ -65,6 +63,6 @@ export class AutoReset {
         throw new AutoResetError('保存结果未能确认，请刷新账号核对后再操作', 502)
       }
       return saved
-    } finally { this.busy.delete(id) }
+    }, () => new AutoResetError('此账号正在保存或用卡，请稍后重新检查', 409))
   }
 }

@@ -1,13 +1,14 @@
-import type { Account, Sample } from '../shared/domain'
+import type { Account, Sample, Usage } from '../shared/domain'
 import type { AccountBenefits, BenefitChannel, BenefitSample, QuotaBenefits, ReferralBenefits } from '../shared/benefits'
 import { DemandCache } from './cache'
-import { benefitSample, fetchedAt, normalizeCredits, normalizeReferrals, normalizeResetCredits, object } from './normalize'
+import { benefitSample, fetchedAt, normalizeCredits, normalizeReferrals, normalizeResetCredits, normalizeOpenAIQuota, object } from './normalize'
 import { UpstreamError, type Upstream } from './upstream'
+import { MemoryPersistence, type ManagerPersistence } from './persistence'
 
 export class BenefitsError extends Error {
   constructor(message: string, public readonly status = 400) { super(message) }
 }
-interface QuotaResult { resetCredits: AccountBenefits['resetCredits']; credits: AccountBenefits['credits']; resetTimeValid: boolean }
+interface QuotaResult { resetCredits: AccountBenefits['resetCredits']; credits: AccountBenefits['credits']; resetTimeValid: boolean; usage: Usage; resetPersisted: boolean | null; creditsPersisted: boolean | null }
 interface ReferralResult { referrals: AccountBenefits['referrals'] }
 type AccountSample = Sample<Account> & { readStartedAt: number | null }
 const cacheWarning = (value: unknown) => value === true ? null : value === false
@@ -18,7 +19,54 @@ const cacheWarning = (value: unknown) => value === true ? null : value === false
 export class Benefits {
   private quota = new DemandCache<QuotaResult>()
   private referrals = new DemandCache<ReferralResult>()
-  constructor(private upstream: Upstream, private account: (id: number) => Promise<AccountSample>) {}
+  private generations = new Map<number, number>()
+  constructor(private upstream: Upstream, private account: (id: number) => Promise<AccountSample>, private persistence: ManagerPersistence = new MemoryPersistence()) {}
+
+  private quotaResult(value: unknown): QuotaResult {
+    const raw = object(value), updatedAt = fetchedAt(raw.fetched_at)
+    if (updatedAt === null) throw new Error('重置卡和 Credits 查询响应不兼容')
+    return {
+      resetCredits: { ...benefitSample(normalizeResetCredits(raw.rate_limit_reset_credits), updatedAt), warning: cacheWarning(raw.cache_persisted) },
+      credits: { ...benefitSample(normalizeCredits(raw.credits), updatedAt), warning: cacheWarning(raw.credits_cache_persisted) },
+      resetTimeValid: true, usage: normalizeOpenAIQuota(raw),
+      resetPersisted: typeof raw.cache_persisted === 'boolean' ? raw.cache_persisted : null,
+      creditsPersisted: typeof raw.credits_cache_persisted === 'boolean' ? raw.credits_cache_persisted : null,
+    }
+  }
+
+  async refreshQuota(id: number) {
+    const generation = this.generations.get(id)
+    return this.quota.get(String(id), 30_000, async () => {
+      const result = this.quotaResult(await this.refresh(`openai/accounts/${id}/quota/refresh`, AbortSignal.timeout(30_000)))
+      if (generation !== this.generations.get(id)) throw new Error('额度查询结果已被用卡操作替换')
+      this.persistQuota(id, result)
+      return result
+    }, true)
+  }
+
+  private persistQuota(id: number, result: QuotaResult) {
+    this.persistence.transaction(() => {
+      this.persistence.recordBenefit(id, 'resetCredits', result.resetCredits, 'query', Date.now(), result.resetPersisted)
+      this.persistence.recordBenefit(id, 'credits', result.credits, 'query', Date.now(), result.creditsPersisted)
+    })
+  }
+
+  /** Apply the mutation's complete response without another provider query. */
+  applyQuota(id: number, raw: unknown) {
+    const result = this.quotaResult(raw)
+    this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+    this.persistQuota(id, result)
+    this.quota.set(String(id), { data: result, updatedAt: Date.now(), error: null })
+    return { benefits: { resetCredits: result.resetCredits, credits: result.credits },
+      quota: { data: result.usage, updatedAt: result.resetCredits.updatedAt, error: null } }
+  }
+
+  invalidateQuota(id: number) {
+    this.generations.set(id, (this.generations.get(id) ?? 0) + 1)
+    this.quota.set(String(id), { data: null, updatedAt: null, error: null })
+    this.persistence.recordBenefit(id, 'resetCredits', benefitSample(null), 'query', Date.now())
+    this.persistence.recordBenefit(id, 'credits', benefitSample(null), 'query', Date.now())
+  }
 
   read(id: number): Promise<AccountBenefits> { return this.load(id) }
 
@@ -40,16 +88,7 @@ export class Benefits {
     if (refresh && !account.error) {
       const signal = AbortSignal.timeout(30_000)
       if (refresh === 'quota') {
-        await this.quota.get(key, 30_000, async () => {
-          const raw = object(await this.refresh(`openai/accounts/${id}/quota/refresh`, signal))
-          const updatedAt = fetchedAt(raw.fetched_at)
-          if (updatedAt === null) throw new Error('重置卡和 Credits 查询响应不兼容')
-          return {
-            resetCredits: { ...benefitSample(normalizeResetCredits(raw.rate_limit_reset_credits), updatedAt), warning: cacheWarning(raw.cache_persisted) },
-            credits: { ...benefitSample(normalizeCredits(raw.credits), updatedAt), warning: cacheWarning(raw.credits_cache_persisted) },
-            resetTimeValid: true,
-          }
-        }, true)
+        await this.refreshQuota(id)
       } else {
         await this.referrals.get(key, 30_000, async () => {
           const raw = object(await this.refresh(`openai/accounts/${id}/referrals/refresh`, signal))
@@ -68,11 +107,21 @@ export class Benefits {
       if (JSON.stringify(snapshots.resetCredits.data) !== JSON.stringify(quota.data.resetCredits.data)) quota.data.resetTimeValid = false
       if (quota.data.resetTimeValid && resetCredits.updatedAt === null) resetCredits.updatedAt = quota.data.resetCredits.updatedAt
     }
-    return {
+    const result = {
       resetCredits,
       credits: this.select(snapshots.credits, quota?.data?.credits, quota, account),
       referrals: this.select(snapshots.referrals, referrals?.data?.referrals, referrals, account),
     }
+    if (!account.error) for (const kind of ['resetCredits', 'credits', 'referrals'] as const) {
+      // Old account reads may only project a newer live result; they cannot
+      // overwrite the persistent observation used to validate its timestamp.
+      const live = kind === 'referrals' ? referrals?.data?.referrals : quota?.data?.[kind]
+      const cached = kind === 'referrals' ? referrals : quota
+      const source = this.useSnapshot(live, cached, account) ? 'sub2api' : 'query'
+      Object.assign(result[kind], this.persistence.recordBenefit<unknown>(id, kind, result[kind], source,
+        source === 'sub2api' ? account.readStartedAt ?? Date.now() : cached?.updatedAt ?? Date.now()))
+    }
+    return result
   }
 
   private select<T>(snapshot: BenefitSample<T>, live: BenefitSample<T> | undefined, refresh: Sample<unknown> | undefined, account: AccountSample): BenefitSample<T> {

@@ -7,6 +7,7 @@ import { Monitor } from './monitor'
 import { createUpstream } from './upstream'
 import { writeSettings } from './settings'
 import { WorkspaceStore } from './workspace'
+import { SQLitePersistence } from './sqlite'
 import { timezoneSchema } from '../shared/domain'
 
 const serverUrl = process.env.SUB2API_URL ?? ''
@@ -21,7 +22,9 @@ const timeZone = timezoneSchema.parse(process.env.SUB2API_TIMEZONE ?? 'UTC')
 const workspace = await WorkspaceStore.open(resolve(process.env.DATA_DIR ?? '.data', 'workspace.json'), timeZone, createHash('sha256').update(`${serverUrl}|${key}`).digest('hex').slice(0, 20))
 const intervals = workspace.snapshot().preferences.intervals
 const upstream = serverUrl && key ? createUpstream(serverUrl, key, process.env.ALLOW_HTTP_UPSTREAM === 'true') : null
-const monitor = upstream ? new Monitor(upstream, intervals, timeZone) : null
+const persistence = new SQLitePersistence(resolve(process.env.DATA_DIR ?? '.data', 'manager.sqlite'),
+  JSON.stringify([workspace.id, createHash('sha256').update(serverUrl).digest('hex')]))
+const monitor = upstream ? new Monitor(upstream, intervals, timeZone, persistence) : null
 const app = new Elysia()
   .use(createApp({ monitor, password, origin, secureCookie: origin.startsWith('https://'), serverUrl,
     instanceId: workspace.id, workspace,

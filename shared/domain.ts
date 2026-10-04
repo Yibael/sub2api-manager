@@ -46,7 +46,8 @@ export const modelRankingsRequestSchema = userRankingsRequestSchema.extend({ ran
 export type ModelRankingsRequest = z.infer<typeof modelRankingsRequestSchema>
 export interface ModelUsageRank { model: string; amount: MoneyAmount; requests: number; tokens: number }
 export interface ModelRanking extends RankingPeriod { range: ModelRankingRange; rows: ModelUsageRank[]; totalAmount: MoneyAmount }
-export function rankingInterval(intervals: Intervals) { return Math.max(30, intervals.spending) }
+/** Shared snapshot reuse only; statistics has no refresh scheduler or interval setting. */
+export const statisticsSnapshotTTL = 30_000
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
 export interface Quota { name: string; percent: number | null; used: MoneyAmount | null; limit: MoneyAmount | null; resetsAt: string | null }
 export interface Account {

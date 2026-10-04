@@ -1,5 +1,5 @@
 import { MoneyDecimal, normalizeMoney } from '../shared/money'
-import { userRankingPeriod, rankingInterval, type Intervals, type Sample, type UserRanking, type UserRankingsRequest, type UserSpendingRank } from '../shared/domain'
+import { userRankingPeriod, statisticsSnapshotTTL, type Sample, type UserRanking, type UserRankingsRequest, type UserSpendingRank } from '../shared/domain'
 import { DemandCache } from './cache'
 import { object } from './normalize'
 import type { Upstream } from './upstream'
@@ -47,11 +47,11 @@ export class Rankings {
   private trendsCache = new DemandCache<TrendRow[]>()
   private adminCostCache = new DemandCache<string>()
   private projectionCache = new DemandCache<Projection>()
-  constructor(private upstream: Upstream, private intervals: () => Intervals, private serverTimeZone: string,
+  constructor(private upstream: Upstream, private serverTimeZone: string,
     private readAdmins: (signal: AbortSignal, force: boolean) => Promise<Sample<number[]>>) {}
 
   private async readTrends(startDate: string, endDate: string, timeZone: string, granularity: 'day' | 'hour', signal: AbortSignal, force: boolean) {
-    return this.trendsCache.get(JSON.stringify([startDate, endDate, timeZone, granularity]), rankingInterval(this.intervals()) * 1000, async () => {
+    return this.trendsCache.get(JSON.stringify([startDate, endDate, timeZone, granularity]), statisticsSnapshotTTL, async () => {
       // The upstream first selects users by whole-range token volume. Expand the
       // selection until it includes all users, including deleted users in logs.
       // Two bounded requests; never present a truncated selection as an exact rank.
@@ -91,7 +91,7 @@ export class Rankings {
       const admin = await excluded()
       let rows: UserSpendingRank[], total: InstanceType<typeof MoneyDecimal>, updatedAt: number
       if (input.range !== 'hour') {
-        const ranking = await this.rankingCache.get(JSON.stringify([startDate, endDate, timeZone]), rankingInterval(this.intervals()) * 1000, async () => {
+        const ranking = await this.rankingCache.get(JSON.stringify([startDate, endDate, timeZone]), statisticsSnapshotTTL, async () => {
           const raw = object(await this.upstream.request('dashboard/users-ranking', { signal, query: {
             start_date: startDate, end_date: endDate, timezone: timeZone, limit: '50',
           } }))
@@ -120,7 +120,7 @@ export class Rankings {
           for (const id of admin.ids) {
             const known = ranked.get(id)
             if (known !== undefined) { total = total.minus(known); continue }
-            const cost = await this.adminCostCache.get(JSON.stringify([startDate, endDate, timeZone, id]), rankingInterval(this.intervals()) * 1000, async () => {
+            const cost = await this.adminCostCache.get(JSON.stringify([startDate, endDate, timeZone, id]), statisticsSnapshotTTL, async () => {
               const raw = object(await this.upstream.request('usage/stats', { signal, query: {
                 start_date: startDate, end_date: endDate, timezone: timeZone, user_id: String(id), nocache: 'true',
               } }))

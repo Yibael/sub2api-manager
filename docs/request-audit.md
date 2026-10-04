@@ -16,19 +16,22 @@
 | 功能 | Sub2API 请求 | 自动触发方式 | 正常缓存 / 限制 |
 | --- | --- | --- | --- |
 | 账号目录 | `GET accounts`，分页 | 资源账号页前台轮询 | 60秒，实例级 |
-| 账号状态 | `GET accounts/:id` | 概览、详情、订阅统计前台轮询 | `intervals.status`，默认5秒，账号级 |
+| 账号状态 | `GET accounts/:id` | 概览、详情前台轮询 | `intervals.status`，默认5秒，账号级 |
 | 自动用卡配置 | 共用 `GET accounts/:id` | 详情前台轮询 | 共用状态缓存；初始化完成前开关显示加载中 |
 | 今日标准用量、请求、Token | `POST accounts/today-stats/batch` | 概览、详情前台轮询 | `intervals.status`，默认5秒，账号级去重 |
 | OAuth 额度 | `POST accounts/usage/batch`；兼容回退 `GET accounts/:id/usage` | 概览、详情前台轮询 | `intervals.quota`，默认30秒；API Key 不调用此通道 |
-| 今日及周期消费 | `GET usage/stats` | 概览、详情、订阅统计前台轮询 | `intervals.spending`，默认15秒，账号 + 日期 + 时区 + 用户 |
-| Admin 名单 | `GET users?role=admin`，分页 | 排除 Admin 的消费或榜单读取时按需获取 | `intervals.spending`，实例级共用 |
-| 用户消费榜及趋势 | `GET dashboard/users-ranking`、`GET dashboard/users-trend`；排除 Admin 可能读取 `usage/stats` | 统计页当前范围前台轮询 | `max(30, intervals.spending)` 秒，范围级 |
-| 模型榜 | `GET dashboard/models`；排除 Admin 按用户读取相同接口 | 统计页当前范围前台轮询 | `max(30, intervals.spending)` 秒，日期 + 时区 + 用户 |
+| 今日及周期消费 | `GET usage/stats` | 概览、详情前台轮询 | `intervals.spending`，默认15秒，账号 + 日期 + 时区 + 用户 |
+| Admin 名单 | `GET users?role=admin`，分页 | 排除 Admin 的消费或榜单读取时按需获取 | 概览/详情使用消费间隔；统计使用独立 30 秒共享快照 |
+| 用户消费榜及趋势 | `GET dashboard/users-ranking`、`GET dashboard/users-trend`；排除 Admin 可能读取 `usage/stats` | 当前范围接近视口时读取一次，之后手动刷新或切换范围 | 独立 30 秒共享快照，无刷新调度，范围级 |
+| 模型榜 | `GET dashboard/models`；排除 Admin 按用户读取相同接口 | 当前范围接近视口时读取一次，之后手动刷新或切换范围 | 独立 30 秒共享快照，无刷新调度，日期 + 时区 + 用户 |
 | 分组目录 | `GET groups`，分页 | 接近视口时读取一次 | 60秒，之后仅手动刷新；保存仅更新已确认值 |
 | 重置卡与 Credits 初读 | 共用 `GET accounts/:id` 中的快照 | 对应查询分组接近视口时读取一次 | 共用状态缓存，之后手动刷新 |
 | 可邀请数量初读 | 共用 `GET accounts/:id` 中的快照 | 对应查询分组接近视口时读取一次 | 共用状态缓存，之后手动刷新 |
 | 查询最新重置卡与 Credits | `POST openai/accounts/:id/quota/refresh` | 仅对应刷新按钮 | 手动 force；账号级在途去重，失败退避从30秒起 |
 | 查询最新可邀请数量 | `POST openai/accounts/:id/referrals/refresh` | 仅对应刷新按钮 | 手动 force；账号级在途去重，失败退避从30秒起 |
+| 订阅与成本 | `GET accounts/:id`、`GET usage/stats` | 卡片接近视口时读取一次，之后局部手动刷新 | 独立 30 秒共享快照，不读取刷新间隔设置 |
+| 手动用卡预览 | `GET accounts/:id` + `POST openai/accounts/:id/quota/refresh` | 仅打开确认界面 | 一次 quota 查询提供额度与权益，保留失败退避 |
+| 手动用卡执行 | `POST openai/accounts/:id/reset-quota` | 仅二次确认后 | 账号共享写锁、SQLite 操作唯一保护，不自动重试 |
 | 检查连接 | `GET accounts`，分页 | 仅设置内的检查按钮 | 共用账号目录缓存 |
 | 分组倍率检查及保存前复核 | `GET groups/:id` | 仅检查变更、确认保存 | 每次操作读取最新值，共用并发及429冷却 |
 | 分组倍率写入 | `PUT groups/:id` | 仅二次确认后 | 一次性凭证，写入不重试 |

@@ -1,5 +1,5 @@
 import { MoneyDecimal, normalizeMoney, sumMoney } from '../shared/money'
-import { userRankingPeriod, rankingInterval, type Intervals, type ModelRanking, type ModelRankingsRequest, type ModelUsageRank, type Sample } from '../shared/domain'
+import { userRankingPeriod, statisticsSnapshotTTL, type ModelRanking, type ModelRankingsRequest, type ModelUsageRank, type Sample } from '../shared/domain'
 import { DemandCache } from './cache'
 import { object } from './normalize'
 import { rankingLimit } from './rankings'
@@ -28,13 +28,13 @@ function parseRows(value: unknown): ModelUsageRank[] {
 export class ModelRankings {
   private aggregates = new DemandCache<ModelUsageRank[]>()
   private projections = new DemandCache<Projection>()
-  constructor(private upstream: Upstream, private intervals: () => Intervals,
+  constructor(private upstream: Upstream,
     private readAdmins: (signal: AbortSignal, force: boolean) => Promise<Sample<number[]>>) {}
 
   async read(input: ModelRankingsRequest): Promise<Sample<ModelRanking>> {
     const period = userRankingPeriod(input.range, new Date(), input.timeZone, input.timeZone)
     const { startDate, endDate, timeZone } = period
-    const interval = rankingInterval(this.intervals()) * 1000, force = input.force === true
+    const interval = statisticsSnapshotTTL, force = input.force === true
     const signal = AbortSignal.timeout(30_000)
     const projection = await this.projections.get(JSON.stringify([input.range, period.period, timeZone, input.includeAdmin]), 0, async () => {
       let admins: number[] = [], updatedAt = Infinity

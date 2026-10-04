@@ -25,7 +25,7 @@ export function useDirectory() {
   return useCompletionQuery<Sample<Account[]>>(['accounts', config.instanceId], 60, visible,
     (force, signal) => api(`/accounts${force ? '?force=true' : ''}`, undefined, signal))
 }
-export function useMonitor(requestedIds?: number[], withSpending = true, scope: 'all' | 'statistics' = 'all') {
+export function useMonitor(requestedIds?: number[], withSpending = true) {
   const { config, preferences } = useWorkspace()
   const visible = useForeground(), now = useNow()
   const [refreshing, setRefreshing] = useState(false)
@@ -35,10 +35,10 @@ export function useMonitor(requestedIds?: number[], withSpending = true, scope: 
   const status = useCompletionQuery<Record<number, Sample<Account>>>(['status', config.instanceId, ids], config.intervals.status, enabled,
     (force, signal) => api('/status', { ids, force }, signal))
   const day = dateInZone(new Date(now), config.serverTimeZone)
-  const today = useCompletionQuery<{ day: string; items: Record<number, Sample<TodayStats>> }>(['today', config.instanceId, ids, day], config.intervals.status, enabled && scope === 'all',
+  const today = useCompletionQuery<{ day: string; items: Record<number, Sample<TodayStats>> }>(['today', config.instanceId, ids, day], config.intervals.status, enabled,
     (force, signal) => api('/today', { ids, force }, signal))
   const eligible = ids.filter(id => status.data?.[id]?.data?.supportsUsage)
-  const quotaEnabled = enabled && eligible.length > 0 && scope === 'all'
+  const quotaEnabled = enabled && eligible.length > 0
   const quota = useCompletionQuery<Record<number, Sample<Usage>>>(['quota', config.instanceId, eligible], config.intervals.quota, quotaEnabled,
     (force, signal) => api('/quota', { ids: eligible, force }, signal))
   const subscriptions = useMemo(() => preferences.subscriptions.filter(subscription => ids.includes(subscription.accountId) && (!status.data?.[subscription.accountId]?.data || status.data[subscription.accountId].data!.type === 'oauth'))
@@ -57,7 +57,7 @@ export function useMonitor(requestedIds?: number[], withSpending = true, scope: 
     setRefreshing(true)
     try {
       await status.forceRefresh()
-      await Promise.all([...(scope === 'all' ? [today.forceRefresh(), quota.forceRefresh()] : []), spending.forceRefresh(), dailySpending.forceRefresh()])
+      await Promise.all([today.forceRefresh(), quota.forceRefresh(), spending.forceRefresh(), dailySpending.forceRefresh()])
     } finally { setRefreshing(false) }
   }
   const nextRefreshIn = refreshCountdown(now, [{ ...quota, enabled: quotaEnabled, interval: config.intervals.quota }])

@@ -1,5 +1,5 @@
 import { MoneyDecimal, normalizeMoney, type MoneyAmount } from '../shared/money'
-import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage, type UserRankingsRequest, type ModelRankingsRequest } from '../shared/domain'
+import { dateInZone, subscriptionCycle, statisticsSnapshotTTL, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type TodayStats, type Usage, type UserRankingsRequest, type ModelRankingsRequest } from '../shared/domain'
 import { DemandCache } from './cache'
 import { normalizeAccount, normalizeToday, normalizeUsage, object } from './normalize'
 import { UpstreamError, type Upstream } from './upstream'
@@ -9,13 +9,18 @@ import { Groups } from './groups'
 import { Benefits } from './benefits'
 import { AutoReset } from './auto-reset'
 import type { AutoResetConfig } from '../shared/auto-reset'
+import { AccountWriteLock } from './account-lock'
+import { ResetCards } from './reset-card'
+import { MemoryPersistence, type ManagerPersistence } from './persistence'
+import type { ResetCardResult } from '../shared/reset-card'
 
-interface SpendingScope { force: boolean; costs: Map<string, Promise<Sample<string>>>; admins?: Promise<Sample<number[]>> }
+interface SpendingScope { force: boolean; costs: Map<string, Promise<Sample<string>>>; admins?: Promise<Sample<number[]>>; statistics?: boolean }
 
 export class Monitor {
   readonly groupManagement: Groups
   readonly accountBenefits: Benefits
   readonly accountAutoReset: AutoReset
+  readonly accountResetCards: ResetCards
   private directoryCache = new DemandCache<Account[]>()
   private accountsCache = new DemandCache<{ account: Account; readStartedAt: number }>()
   private todayCache = new DemandCache<{ day: string; stats: TodayStats }>()
@@ -23,22 +28,52 @@ export class Monitor {
   private costCache = new DemandCache<string>()
   private spendingCache = new DemandCache<{ amount: MoneyAmount; updatedAt: number }>()
   private adminCache = new DemandCache<number[]>()
+  private statisticsAdminCache = new DemandCache<number[]>()
+  private statisticsAccountCache = new DemandCache<Account>()
+  private statisticsCostCache = new DemandCache<string>()
   private batchUsageSupported = true
   private userRankings: Rankings
   private modelRanking: ModelRankings
-  constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {
+  constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string, persistence: ManagerPersistence = new MemoryPersistence()) {
+    const accountLock = new AccountWriteLock()
     this.groupManagement = new Groups(upstream)
-    this.accountBenefits = new Benefits(upstream, async id => (await this.detailSamples([id]))[id])
+    this.accountBenefits = new Benefits(upstream, async id => (await this.detailSamples([id]))[id], persistence)
     this.accountAutoReset = new AutoReset(upstream, () => {
       this.directoryCache = new DemandCache<Account[]>()
       this.accountsCache = new DemandCache<{ account: Account; readStartedAt: number }>()
-    })
-    this.userRankings = new Rankings(upstream, () => this.intervals, serverTimeZone, (signal, force) => this.admins(signal, force))
-    this.modelRanking = new ModelRankings(upstream, () => this.intervals, (signal, force) => this.admins(signal, force))
+    }, accountLock)
+    this.accountResetCards = new ResetCards(upstream, this.accountBenefits, persistence, accountLock, (id, result) => this.applyResetCard(id, result))
+    this.userRankings = new Rankings(upstream, serverTimeZone, (signal, force) => this.statisticsAdmins(signal, force))
+    this.modelRanking = new ModelRankings(upstream, (signal, force) => this.statisticsAdmins(signal, force))
+  }
+
+  private applyResetCard(id: number, result: ResetCardResult) {
+    const now = Date.now(), account = result.account
+    if (account) {
+      this.accountsCache.set(String(id), { data: { account, readStartedAt: now }, updatedAt: now, error: null })
+      const directory = this.directoryCache.peek('directory')
+      if (directory?.data) this.directoryCache.set('directory', { ...directory, data: directory.data.map(v => v.id === id ? account : v) })
+      else this.directoryCache.set('directory', { data: null, updatedAt: null, error: '目录待刷新' })
+    } else {
+      this.accountsCache.set(String(id), { data: null, updatedAt: null, error: '用卡后账号状态待更新' })
+    }
+    this.usageCache.set(String(id), result.quota ?? { data: null, updatedAt: null, error: '用卡后额度待更新，请手动查询并核对' })
   }
 
   private admins(signal: AbortSignal, force = false) {
     return this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number), force)
+  }
+  private statisticsAdmins(signal: AbortSignal, force = false) {
+    return this.statisticsAdminCache.get('admins', statisticsSnapshotTTL, async () => (await this.directory('users', signal)).map(v => object(v).id as number), force)
+  }
+  private statisticsAccounts(ids: number[], signal: AbortSignal, force: boolean) {
+    return this.statisticsAccountCache.getMany(ids.map(String), statisticsSnapshotTTL, async missing => new Map<string, Account | Error>(await Promise.all(missing.map(async key => {
+      try {
+        const account = normalizeAccount(await this.upstream.request(`accounts/${key}`, { signal }))
+        if (account.id !== Number(key)) throw new Error('账号响应不匹配')
+        return [key, account] as const
+      } catch (error) { return [key, error as Error] as const }
+    }))), force)
   }
   rankings(input: UserRankingsRequest) { return this.userRankings.read(input) }
   modelRankings(input: ModelRankingsRequest) { return this.modelRanking.read(input) }
@@ -143,11 +178,11 @@ export class Monitor {
     // Only raw upstream scopes have a TTL. Recompute the projection from those
     // shared samples to avoid duplicating totals or adding a second stale window.
     // This zero-TTL cache coalesces calculations and retains the last valid result.
-    const result = await this.spendingCache.get(JSON.stringify([accountId, start, day, timeZone, includeAdmin]), 0, async () => {
+    const result = await this.spendingCache.get(JSON.stringify([accountId, start, day, timeZone, includeAdmin, !!scope.statistics]), 0, async () => {
       let admins: number[] = []
       const timestamps: number[] = []
       if (!includeAdmin) {
-        const sample = await (scope.admins ??= this.admins(signal, scope.force))
+        const sample = await (scope.admins ??= scope.statistics ? this.statisticsAdmins(signal, scope.force) : this.admins(signal, scope.force))
         if (sample.error || !sample.data) throw new Error('Admin 名单读取失败，未生成排除 Admin 的统计')
         admins = sample.data
         timestamps.push(sample.updatedAt!)
@@ -156,7 +191,7 @@ export class Monitor {
         const key = JSON.stringify([accountId, start, day, timeZone, userId ?? null])
         let pending = scope.costs.get(key)
         if (!pending) {
-          pending = this.costCache.get(key, this.intervals.spending * 1000, async () => {
+          pending = (scope.statistics ? this.statisticsCostCache : this.costCache).get(key, scope.statistics ? statisticsSnapshotTTL : this.intervals.spending * 1000, async () => {
           const raw = object(await this.upstream.request('usage/stats', { signal, query: {
             account_id: String(accountId), start_date: start, end_date: day, timezone: timeZone, nocache: 'true',
             ...(userId === undefined ? {} : { user_id: String(userId) }),
@@ -196,11 +231,12 @@ export class Monitor {
     }))
     return { day, items: Object.fromEntries(items) }
   }
-  async spending(input: SpendingRequest): Promise<{ day: string; rows: SpendingRow[] }> {
+  async spending(input: SpendingRequest, statistics = false) {
     const day = dateInZone(new Date(), input.timeZone)
     const signal = AbortSignal.timeout(30_000)
-    const scope: SpendingScope = { force: input.force === true, costs: new Map() }
-    const accounts = await this.details(input.subscriptions.map(s => s.accountId), signal)
+    const scope: SpendingScope = { force: input.force === true, costs: new Map(), statistics }
+    const ids = input.subscriptions.map(s => s.accountId)
+    const accounts = statistics ? await this.statisticsAccounts(ids, signal, scope.force) : await this.details(ids, signal)
     const rows = await Promise.all(input.subscriptions.map(async subscription => {
       const cycle = subscriptionCycle(day, subscription.renewalDay)
       const invalid = !!accounts[subscription.accountId]?.error || !accounts[subscription.accountId]?.data || accounts[subscription.accountId]?.data?.type !== 'oauth'
@@ -210,6 +246,6 @@ export class Monitor {
       const [spending, today] = await Promise.all([read(cycle.start), read(day)])
       return { accountId: subscription.accountId, cycle, spending, today }
     }))
-    return { day, rows }
+    return { day, rows, ...(statistics ? { accounts } : {}) }
   }
 }

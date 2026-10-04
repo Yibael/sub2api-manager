@@ -10,6 +10,10 @@ export class DemandCache<T> {
 
   peek(key: string): Sample<T> | undefined { return this.entries.get(key)?.sample }
 
+  set(key: string, sample: Sample<T>) {
+    this.entries.set(key, { sample, settledAt: sample.data === null ? null : this.now(), intervalMs: 0, retryAt: 0, failures: 0 })
+  }
+
   async get(key: string, intervalMs: number, load: () => Promise<T>, force = false): Promise<Sample<T>> {
     const result = await this.getMany([key], intervalMs, async () => {
       try { return new Map([[key, await load()]]) } catch (error) { return new Map([[key, safeError(error)]]) }
@@ -55,6 +59,9 @@ export class DemandCache<T> {
         values = new Map([...missing.keys()].map(key => [key, safeError(error)]))
       }
       for (const [key, { entry, resolve }] of missing) {
+        // A confirmed mutation can seed a new generation while this read is in flight.
+        const current = this.entries.get(key)
+        if (current !== entry) { resolve(current?.sample ?? { data: null, updatedAt: null, error: null }); continue }
         const value = values.get(key) ?? new Error('响应缺少所需数据')
         const now = this.now()
         entry.settledAt = now
