@@ -1,6 +1,6 @@
 import { useNavigate } from '@tanstack/react-router'
 import type { ReactNode } from 'react'
-import { PageHeading } from '@/components/common'
+import { PageHeading } from '@/components/page-heading'
 import { SegmentedControl } from '@/components/segmented-control'
 
 const sections = [{ value: 'accounts', label: '账号' }, { value: 'groups', label: '分组' }] as const

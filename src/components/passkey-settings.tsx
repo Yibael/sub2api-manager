@@ -1,3 +1,4 @@
+import { EmptyState } from '@/components/common'
 import { useState } from 'react'
 import { useQuery } from '@tanstack/react-query'
 import { Plus, Trash2 } from 'lucide-react'
@@ -37,7 +38,7 @@ export function PasskeySettings() {
     <Separator />
     <StableRegion phase={pending ? 'pending' : 'ready'} busy={list.isFetching} contentClassName="flex flex-col gap-5">
       {list.error && <Alert variant="destructive"><AlertTitle>无法读取 Passkey</AlertTitle><AlertDescription>{list.error.message}<Button variant="outline" onClick={() => void list.refetch()}>重试</Button></AlertDescription></Alert>}
-      {pending ? <div className="flex items-start justify-between gap-3" role="status" aria-label="正在读取 Passkey"><div className="flex flex-col gap-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-44" /><Skeleton className="h-3 w-32" /></div><Skeleton className="h-10 w-20" /></div> : list.data && (!list.data.items.length ? <p className="text-sm text-muted-foreground">尚未添加 Passkey</p> : list.data.items.map(key => <PasskeyItem key={key.id} value={key} disabled={busy} rename={name => run(() => api('/passkeys/rename', { id: key.id, name }), '名称已保存')} remove={() => run(() => api('/passkeys/remove', { id: key.id }), 'Passkey 已移除')} />))}
+      {pending ? <div className="flex items-start justify-between gap-3" role="status" aria-label="正在读取 Passkey"><div className="flex flex-col gap-2"><Skeleton className="h-4 w-28" /><Skeleton className="h-3 w-44" /><Skeleton className="h-3 w-32" /></div><Skeleton className="h-10 w-20" /></div> : list.data && (!list.data.items.length ? <EmptyState title="尚未添加 Passkey" /> : list.data.items.map(key => <PasskeyItem key={key.id} value={key} disabled={busy} rename={name => run(() => api('/passkeys/rename', { id: key.id, name }), '名称已保存')} remove={() => run(() => api('/passkeys/remove', { id: key.id }), 'Passkey 已移除')} />))}
     </StableRegion>
     {error && <Alert variant="destructive"><AlertTitle>操作未完成</AlertTitle><AlertDescription>{error}</AlertDescription></Alert>}
   </CardContent></Card>

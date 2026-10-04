@@ -1,15 +1,15 @@
-import { ArrowLeft, ArrowUpRight, CircleAlert, Layers, Pin, Plus, RefreshCw } from 'lucide-react'
+import { ArrowUpRight, CircleAlert, Gauge, Layers, Pin, Plus, RefreshCw } from 'lucide-react'
 import openaiIcon from '@lobehub/icons-static-svg/icons/openai.svg'
 import claudeIcon from '@lobehub/icons-static-svg/icons/claude.svg'
 import geminiIcon from '@lobehub/icons-static-svg/icons/gemini.svg'
 import antigravityIcon from '@lobehub/icons-static-svg/icons/antigravity.svg'
 import grokIcon from '@lobehub/icons-static-svg/icons/grok.svg'
-import { Link, useCanGoBack, useRouter } from '@tanstack/react-router'
+import { Link } from '@tanstack/react-router'
 import { useEffect, useState, type ReactNode } from 'react'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardDescription, CardContent, CardFooter, CardAction } from '@/components/ui/card'
 import { Progress } from '@/components/ui/progress'
-import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyContent } from '@/components/ui/empty'
+import { Empty, EmptyHeader, EmptyMedia, EmptyTitle, EmptyDescription, EmptyContent } from '@/components/ui/empty'
 import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
 import { Spinner } from '@/components/ui/spinner'
 import { AccountBadges, AccountStatusBadges } from '@/components/account-badges'
@@ -20,6 +20,8 @@ import { formatQuotaCountdown } from '@/lib/quota-countdown'
 import { type Quota } from '../../shared/domain'
 import { formatMoney, type MoneyInput } from '../../shared/money'
 import type { MonitorData } from '@/lib/monitor'
+
+export { PageHeading, SectionHeading, BackButton } from '@/components/page-heading'
 
 export function Brand({ compact = false }: { compact?: boolean }) {
   return <div className="flex items-center gap-3"><div className="brand-mark" aria-hidden="true"><span /><span /><span /></div>{!compact && <span className="brand-name">sub2api <span className="text-muted-foreground">manager</span></span>}</div>
@@ -38,17 +40,9 @@ export function ErrorNotice({ message }: { message: string | null | undefined })
   if (!message) return null
   return <Alert variant="destructive"><CircleAlert /><AlertTitle>操作未完成</AlertTitle><AlertDescription>{message}</AlertDescription></Alert>
 }
-export function PageHeading({ title, action }: { title: string; action?: ReactNode }) {
-  return <div className="page-heading"><h1 title={title}>{title}</h1>{action}</div>
-}
-export function BackButton({ fallback }: { fallback: '/accounts' | '/settings' }) {
-  const router = useRouter(), canGoBack = useCanGoBack()
-  return <Button type="button" variant="ghost" onClick={() => {
-    if (canGoBack) router.history.back()
-    else void router.navigate({ to: fallback, replace: true })
-  }}><ArrowLeft data-icon="inline-start" />返回</Button>
-}
-export function RefreshButton({ busy, onClick, countdown, label = '立即刷新' }: { busy: boolean; onClick: () => void; countdown?: number | null; label?: string }) {
+export function RefreshButton({ busy, onClick, countdown, label = '刷新', mode = 'label' }: {
+  busy: boolean; onClick: () => void; countdown?: number | null; label?: string; mode?: 'label' | 'icon';
+}) {
   const [finishing, setFinishing] = useState(busy)
   if (busy && !finishing) setFinishing(true)
   useEffect(() => {
@@ -57,16 +51,24 @@ export function RefreshButton({ busy, onClick, countdown, label = '立即刷新'
     return () => window.clearTimeout(timer)
   }, [busy, finishing])
   const loading = busy || finishing
-  return <Button className="refresh-button" variant="outline" onClick={onClick} disabled={loading} aria-busy={loading} aria-label={loading ? '正在刷新' : label}>
-    <span className="refresh-icon" aria-hidden="true">{loading ? <Spinner /> : <RefreshCw className="size-4" />}</span>
-    <span className="refresh-label">{loading ? '刷新中' : countdown == null ? '刷新' : `${countdown}s`}</span>
-  </Button>
+  return <div className="refresh-action">
+    {countdown != null && <span className="refresh-countdown" title={`${countdown} 秒后自动刷新额度`}>{countdown}s</span>}
+    <Button type="button" className="refresh-button" variant="outline" size={mode === 'icon' ? 'icon' : 'default'} onClick={onClick} disabled={loading} aria-busy={loading} aria-label={label} title={label}>
+      {loading ? <Spinner data-icon={mode === 'label' ? 'inline-start' : undefined} /> : <RefreshCw data-icon={mode === 'label' ? 'inline-start' : undefined} />}
+      {mode === 'label' && label}
+    </Button>
+  </div>
+}
+export function EmptyState({ title, description, icon, action, panel = false }: {
+  title: string; description?: ReactNode; icon?: ReactNode; action?: ReactNode; panel?: boolean;
+}) {
+  return <Empty className={cn('empty-state', panel && 'empty-panel')}><EmptyHeader>{icon && <EmptyMedia variant="icon">{icon}</EmptyMedia>}<EmptyTitle>{title}</EmptyTitle>{description && <EmptyDescription>{description}</EmptyDescription>}</EmptyHeader>{action && <EmptyContent>{action}</EmptyContent>}</Empty>
 }
 export function NoPins() {
-  return <Empty className="empty-panel"><EmptyHeader><EmptyMedia variant="icon"><Pin /></EmptyMedia><EmptyTitle>暂无关注账号</EmptyTitle></EmptyHeader><EmptyContent><Button asChild><Link to="/accounts" replace><Plus data-icon="inline-start" />选择账号</Link></Button></EmptyContent></Empty>
+  return <EmptyState panel title="暂无关注账号" icon={<Pin />} action={<Button asChild><Link to="/accounts" replace><Plus data-icon="inline-start" />选择账号</Link></Button>} />
 }
 export function Metric({ label, value, icon, loading = false }: { label: string; value: ReactNode; icon: ReactNode; loading?: boolean }) {
-  return <Card className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent><div className="metric-value"><LoadingValue loading={loading}>{value}</LoadingValue></div></CardContent></Card>
+  return <Card size="sm" className="metric-card"><CardHeader><CardDescription>{label}</CardDescription><CardAction><span className="metric-icon">{icon}</span></CardAction></CardHeader><CardContent><div className="metric-value"><LoadingValue loading={loading}>{value}</LoadingValue></div></CardContent></Card>
 }
 export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: number; estimatedCost?: MoneyInput | null }) {
   const reset = formatQuotaCountdown(quota.resetsAt, now)
@@ -83,8 +85,8 @@ export function QuotaRow({ quota, now, estimatedCost }: { quota: Quota; now: num
 export function QuotaList({ quotas, pending, empty, now, estimatedCost, limit }: {
   quotas: Quota[]; pending: boolean; empty: string; now: number; estimatedCost?: MoneyInput | null; limit?: number;
 }) {
-  return <StableRegion busy={pending} phase={pending ? 'pending' : 'ready'}><div className="quota-list">
-    {pending ? <><QuotaSkeleton /><QuotaSkeleton /><span className="sr-only" role="status">正在读取额度</span></> : quotas.length ? (limit ? quotas.slice(0, limit) : quotas).map(q => <QuotaRow key={q.name} quota={q} now={now} estimatedCost={q.name === '7日额度' ? estimatedCost : undefined} />) : <p className="quota-empty">{empty}</p>}
+  return <StableRegion busy={pending} phase={pending ? 'pending' : 'ready'}><div className={cn('quota-list', !pending && !quotas.length && 'quota-list-empty')}>
+    {pending ? <><QuotaSkeleton /><QuotaSkeleton /><span className="sr-only" role="status">正在读取额度</span></> : quotas.length ? (limit ? quotas.slice(0, limit) : quotas).map(q => <QuotaRow key={q.name} quota={q} now={now} estimatedCost={q.name === '7日额度' ? estimatedCost : undefined} />) : <Empty className="quota-empty-state"><EmptyHeader><EmptyMedia variant="icon"><Gauge aria-hidden="true" /></EmptyMedia><EmptyTitle>{empty}</EmptyTitle></EmptyHeader></Empty>}
   </div></StableRegion>
 }
 export function AccountCard({ id, monitor }: { id: number; monitor: MonitorData }) {

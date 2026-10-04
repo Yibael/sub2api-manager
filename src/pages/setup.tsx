@@ -61,7 +61,7 @@ export function SetupPage({ config }: { config: PublicConfig }) {
                 </FieldGroup>
                 <form.Subscribe selector={state => state.isSubmitting}>{pending => (
                   <Button disabled={pending || passkeyBusy} type="submit" className="mt-5 w-full">
-                    {pending ? '登录中…' : '登录'}<ArrowRight data-icon="inline-end" />
+                    {pending && <Spinner data-icon="inline-start" />}登录{!pending && <ArrowRight data-icon="inline-end" />}
                   </Button>
                 )}</form.Subscribe>
                 {error && <div className="mt-4"><ErrorNotice message={error} /></div>}

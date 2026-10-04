@@ -1,12 +1,11 @@
 import { useState } from 'react'
-import { CircleAlert, RefreshCw } from 'lucide-react'
+import { CircleAlert } from 'lucide-react'
 import { api } from '@/lib/api'
 import { useManualQuery } from '@/lib/manual-query'
 import { useWorkspace } from '@/lib/preferences'
-import { ErrorNotice } from '@/components/common'
+import { ErrorNotice, RefreshButton } from '@/components/common'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-import { Spinner } from '@/components/ui/spinner'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer'
@@ -36,20 +35,17 @@ export function AccountBenefitsCard({ account, now }: { account: Account; now: n
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(time))
   const fullDate = (time: string) => new Intl.DateTimeFormat('zh-CN', { timeZone: preferences.timeZone,
     dateStyle: 'long', timeStyle: 'short', hourCycle: 'h23' }).format(new Date(time))
-  const queryTime = (updatedAt: number | null) => <p className="mt-2" title={updatedAt === null ? '此快照的查询时间未知' : new Date(updatedAt).toLocaleString('zh-CN', { timeZone: preferences.timeZone })}>查询于 {updatedAt === null ? '—' : date(updatedAt)}</p>
-  return <Drawer open={showExpirations} onOpenChange={setShowExpirations}><Card>
+  const queryTime = (updatedAt: number | null) => <p className="query-time" title={updatedAt === null ? '此快照的查询时间未知' : new Date(updatedAt).toLocaleString('zh-CN', { timeZone: preferences.timeZone })}>查询于 {updatedAt === null ? '—' : date(updatedAt)}</p>
+  return <Drawer open={showExpirations} onOpenChange={setShowExpirations}><Card className="benefits-card">
     <CardHeader>
       <CardTitle>账号权益</CardTitle>
       <CardDescription>点击各项刷新按钮查询最新信息</CardDescription>
     </CardHeader>
-    <CardContent className="grid gap-5 md:grid-cols-[minmax(0,2fr)_auto_minmax(0,1fr)]">
+    <CardContent className="benefits-content">
       <section className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-quota-${account.id}`}>
-        <div className="flex items-center justify-between gap-3">
-          <h3 id={`benefits-quota-${account.id}`} className="text-sm font-medium">重置卡与 Credits</h3>
-          <Button type="button" variant="outline" size="icon" disabled={quota.isFetching} aria-busy={quota.isFetching}
-            aria-label="查询最新重置卡与 Credits" title="查询最新重置卡与 Credits" onClick={() => void quota.forceRefresh()}>
-            {quota.isFetching ? <Spinner /> : <RefreshCw />}
-          </Button>
+        <div className="benefit-heading">
+          <h3 id={`benefits-quota-${account.id}`}>重置卡与 Credits</h3>
+          <RefreshButton mode="icon" busy={quota.isFetching} label="查询最新重置卡与 Credits" onClick={() => void quota.forceRefresh()} />
         </div>
         <div className="detail-metrics benefits-quota-metrics">
           <div className="min-w-0"><p>重置卡</p><strong className="tabular-nums">{availableResetCredits(quotaData.resetCredits, now)?.toLocaleString() ?? '—'}</strong>
@@ -65,15 +61,12 @@ export function AccountBenefitsCard({ account, now }: { account: Account; now: n
         </div>}
         <BenefitNotices error={quota.error} samples={[["重置卡", quotaData.resetCredits], ["Credits", quotaData.credits]]} />
       </section>
-      <Separator orientation="vertical" className="hidden md:block" />
+      <Separator orientation="vertical" className="benefits-divider" />
       <section className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-referrals-${account.id}`}>
-        <Separator className="md:hidden" />
-        <div className="flex items-center justify-between gap-3">
-          <h3 id={`benefits-referrals-${account.id}`} className="text-sm font-medium">邀请</h3>
-          <Button type="button" variant="outline" size="icon" disabled={referrals.isFetching} aria-busy={referrals.isFetching}
-            aria-label="查询最新可邀请数量" title="查询最新可邀请数量" onClick={() => void referrals.forceRefresh()}>
-            {referrals.isFetching ? <Spinner /> : <RefreshCw />}
-          </Button>
+        <Separator className="benefits-mobile-divider" />
+        <div className="benefit-heading">
+          <h3 id={`benefits-referrals-${account.id}`}>邀请</h3>
+          <RefreshButton mode="icon" busy={referrals.isFetching} label="查询最新可邀请数量" onClick={() => void referrals.forceRefresh()} />
         </div>
         <div className="detail-metrics benefits-referral-metrics">
           <div className="min-w-0"><p>可邀请数量</p><strong className="tabular-nums">{referralData.referrals.data?.availableInvites?.toLocaleString() ?? '—'}</strong>

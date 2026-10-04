@@ -74,7 +74,7 @@ export function GroupRateEditor({ group, onClose, onSaved }: { group: Group; onC
           </Field>
         </FieldGroup>
         <div className="mt-4"><ErrorNotice message={error} /></div>
-        <div className="mt-6 flex gap-3">
+        <div className="form-actions">
           <Button type="submit" disabled={!!busy} className="flex-1">{busy === 'preview' && <Spinner data-icon="inline-start" />}{busy === 'preview' ? '正在检查…' : '检查变更'}</Button>
           <Button type="button" variant="outline" disabled={!!busy} onClick={onClose}>取消</Button>
         </div>

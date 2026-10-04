@@ -4,7 +4,7 @@ import { CreditCard, Pin, PinOff } from 'lucide-react'
 import { toast } from 'sonner'
 import { useMonitor } from '@/lib/monitor'
 import { useWorkspace } from '@/lib/preferences'
-import { BackButton, ErrorNotice, Money, PageHeading, ProviderMark, QuotaList, RefreshButton } from '@/components/common'
+import { EmptyState, ErrorNotice, Money, PageHeading, ProviderMark, QuotaList, RefreshButton } from '@/components/common'
 import { DetailSkeleton, LoadingValue, StableRegion } from '@/components/loading'
 import { AccountBadges, AccountStatusBadges } from '@/components/account-badges'
 import { SubscriptionEditor } from '@/components/subscription-editor'
@@ -27,13 +27,12 @@ export function DetailPage() {
   const todayPending = !today?.data && !today?.error && !monitor.today.error
   const spendingPending = !!subscription && !spending && !monitor.spending.error
   return <div className="page-stack">
-    <div><BackButton fallback="/accounts" /></div>
-    <PageHeading title={account?.name ?? `账号 #${rawId}`} action={<RefreshButton countdown={monitor.nextRefreshIn} busy={pending || monitor.refreshing || monitor.quota.isFetching} onClick={() => void monitor.refresh()} />} />
+    <PageHeading back="/accounts" title={account?.name ?? `账号 #${rawId}`} action={<RefreshButton label="刷新账号" countdown={monitor.nextRefreshIn} busy={pending || monitor.refreshing || monitor.quota.isFetching} onClick={() => void monitor.refresh()} />} />
     <ErrorNotice message={!valid ? '账号 ID 无效' : monitor.status.error?.message ?? sample?.error ?? monitor.today.error?.message ?? today?.error ?? monitor.quota.error?.message ?? usage?.error} />
     <StableRegion phase={pending ? 'pending' : 'ready'} busy={monitor.isFetching} contentClassName="page-stack">
-      {!account ? pending ? <DetailSkeleton /> : <p className="text-sm text-muted-foreground">暂无账号详情</p> : <>
+      {!account ? pending ? <DetailSkeleton /> : <EmptyState panel title="暂无账号详情" /> : <>
         <Card><CardHeader className="gap-3"><div className="flex min-w-0 items-center gap-3"><ProviderMark platform={account.platform} /><CardTitle>运行状态</CardTitle></div><CardAction className="row-span-1 self-center"><AccountStatusBadges account={account} now={monitor.now} stale={!!sample?.error || !!monitor.status.error} /></CardAction><CardDescription className="col-span-2"><AccountBadges account={account} showId /></CardDescription></CardHeader><CardContent>
-          <div className="detail-metrics"><div><p>当前并发 / 上限</p><strong>{account.currentConcurrency ?? '—'} / {account.concurrency ?? '—'}</strong></div><div><p>今日请求</p><strong><LoadingValue loading={todayPending}>{today?.data?.requests?.toLocaleString() ?? '—'}</LoadingValue></strong></div><div><p>今日 Token</p><strong><LoadingValue loading={todayPending}>{today?.data?.tokens?.toLocaleString() ?? '—'}</LoadingValue></strong></div></div>
+          <div className="detail-metrics"><div><p>当前并发 / 上限</p><strong className="tabular-nums">{account.currentConcurrency ?? '—'} / {account.concurrency ?? '—'}</strong></div><div><p>今日请求</p><strong className="tabular-nums"><LoadingValue loading={todayPending}>{today?.data?.requests?.toLocaleString() ?? '—'}</LoadingValue></strong></div><div><p>今日 Token</p><strong className="tabular-nums"><LoadingValue loading={todayPending}>{today?.data?.tokens?.toLocaleString() ?? '—'}</LoadingValue></strong></div></div>
           <div className="mt-5"><Button variant={preferences.pins.includes(id) ? 'secondary' : 'default'} onClick={() => { if (!preferences.pins.includes(id) && preferences.pins.length >= 100) { toast.error('最多关注 100 个账号'); return } update({ pins: preferences.pins.includes(id) ? preferences.pins.filter(p => p !== id) : [...preferences.pins, id] }) }}>{preferences.pins.includes(id) ? <PinOff data-icon="inline-start" /> : <Pin data-icon="inline-start" />}{preferences.pins.includes(id) ? '取消关注' : '关注账号'}</Button></div>
         </CardContent></Card>
         <div className="detail-grid">
