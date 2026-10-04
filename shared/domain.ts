@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import { MoneyDecimal, normalizeMoney, type MoneyAmount } from './money'
+import type { AccountBenefits } from './benefits'
+import type { AutoResetConfig } from './auto-reset'
 
 export const intervalsSchema = z.object({
   status: z.union([z.literal(2), z.literal(5), z.literal(10), z.literal(15), z.literal(30)]),
@@ -45,7 +47,7 @@ export interface Account {
   id: number; name: string; platform: string; type: string; status: string;
   schedulable: boolean | null; concurrency: number | null; currentConcurrency: number | null;
   rateLimitResetAt: string | null; overloadUntil: string | null; tempUnschedulableUntil: string | null;
-  supportsUsage: boolean; localQuotas: Quota[];
+  supportsUsage: boolean; localQuotas: Quota[]; benefits: AccountBenefits | null; autoReset: AutoResetConfig | null;
 }
 export interface TodayStats { standardCost: MoneyAmount | null; accountCost: MoneyAmount | null; userCost: MoneyAmount | null; requests: number | null; tokens: number | null }
 export interface Usage { windows: Quota[]; weeklyCost: MoneyAmount | null; estimatedWeeklyCost: MoneyAmount | null }

@@ -1,16 +1,33 @@
-import { useEffect, useState } from 'react'
+import { useEffect, useState, type ReactNode } from 'react'
 import { useRegisterSW } from 'virtual:pwa-register/react'
 import { toast } from 'sonner'
-import { Check, Download, Share, PlusSquare } from 'lucide-react'
+import { Check, Download, Share, PlusSquare, RefreshCw } from 'lucide-react'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
-import { Alert, AlertTitle, AlertDescription } from '@/components/ui/alert'
+import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
+import { Spinner } from '@/components/ui/spinner'
+import { PwaUpdateContext, usePwaUpdate } from '@/lib/pwa'
 
 interface InstallEvent extends Event { prompt(): Promise<void>; userChoice: Promise<{ outcome: string }> }
-export function PwaUpdate() {
+export function PwaProvider({ children }: { children: ReactNode }) {
   const { needRefresh: [needRefresh], updateServiceWorker } = useRegisterSW({ onRegisterError: () => toast.error('离线功能暂不可用') })
+  const [updating, setUpdating] = useState(false)
+  async function update() {
+    if (updating || !needRefresh) return
+    setUpdating(true)
+    try { await updateServiceWorker(true) }
+    catch { toast.error('更新失败，请稍后重试') }
+    finally { setUpdating(false) }
+  }
+  return <PwaUpdateContext.Provider value={{ needRefresh, updating, update }}>{children}</PwaUpdateContext.Provider>
+}
+export function AppUpdateCard() {
+  const { needRefresh, updating, update } = usePwaUpdate()
   if (!needRefresh) return null
-  return <div className="pwa-update content-enter"><Alert><AlertTitle>有新版本可用</AlertTitle><AlertDescription><Button variant="outline" onClick={() => void updateServiceWorker(true)}>更新并重载</Button></AlertDescription></Alert></div>
+  return <Card><CardHeader><CardTitle>应用更新</CardTitle><CardDescription>有新版本可用</CardDescription><CardAction><Badge variant="secondary">可更新</Badge></CardAction></CardHeader>
+    <CardContent className="flex flex-col gap-4"><p className="text-sm text-muted-foreground">更新后将重新加载页面。</p>
+      <Button type="button" className="self-start" disabled={updating} aria-busy={updating} onClick={() => void update()}>{updating ? <Spinner data-icon="inline-start" /> : <RefreshCw data-icon="inline-start" />}{updating ? '更新中…' : '更新并重载'}</Button>
+    </CardContent></Card>
 }
 export function InstallHelp() {
   const [install, setInstall] = useState<InstallEvent | null>(null)

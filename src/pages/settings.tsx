@@ -9,7 +9,8 @@ import { api, lockSession } from '@/lib/api'
 import { BackButton, PageHeading, ErrorNotice } from '@/components/common'
 import { PasskeySettings } from '@/components/passkey-settings'
 import { workspacePreferencesSchema } from '../../shared/preferences'
-import { InstallHelp } from '@/components/pwa'
+import { AppUpdateCard, InstallHelp } from '@/components/pwa'
+import { usePwaUpdate } from '@/lib/pwa'
 import { Button } from '@/components/ui/button'
 import { Card, CardHeader, CardTitle, CardContent } from '@/components/ui/card'
 import { FieldGroup, Field, FieldContent, FieldLabel, FieldError, FieldDescription } from '@/components/ui/field'
@@ -24,13 +25,14 @@ import { defaultIntervals, intervalsSchema, type Intervals } from '../../shared/
 export function SettingsPage() {
   const path = useRouterState({ select: state => state.location.pathname })
   const { preferences, update } = useWorkspace()
+  const { needRefresh } = usePwaUpdate()
   return <div className="page-stack settings-page">{path !== '/settings' && <div><BackButton fallback="/settings" /></div>}<PageHeading title={path.endsWith('/connection') ? '连接设置' : path.endsWith('/preferences') ? '刷新与统计' : path.endsWith('/security') ? '登录与安全' : path.endsWith('/app') ? '应用与数据' : '设置'} />
-    {path === '/settings' ? <><Card><CardHeader><CardTitle>外观与隐私</CardTitle></CardHeader><CardContent><div className="settings-row"><div><h3>主题</h3></div><ToggleGroup type="single" value={preferences.theme} onValueChange={theme => { if (theme) update({ theme: theme as 'light' | 'dark' | 'system' }) }} variant="outline"><ToggleGroupItem value="light" aria-label="浅色主题"><Sun /></ToggleGroupItem><ToggleGroupItem value="dark" aria-label="深色主题"><Moon /></ToggleGroupItem><ToggleGroupItem value="system" aria-label="跟随系统"><Monitor /></ToggleGroupItem></ToggleGroup></div><Separator /><div className="settings-row"><div><h3 className="flex items-center gap-2"><EyeOff className="size-4" />隐藏金额</h3></div><Switch aria-label="隐藏金额" checked={preferences.hideAmounts} onCheckedChange={hideAmounts => update({ hideAmounts })} /></div></CardContent></Card><Card><CardContent className="settings-links">{[
+    {path === '/settings' ? <><AppUpdateCard /><Card><CardHeader><CardTitle>外观与隐私</CardTitle></CardHeader><CardContent><div className="settings-row"><div><h3>主题</h3></div><ToggleGroup type="single" value={preferences.theme} onValueChange={theme => { if (theme) update({ theme: theme as 'light' | 'dark' | 'system' }) }} variant="outline"><ToggleGroupItem value="light" aria-label="浅色主题"><Sun /></ToggleGroupItem><ToggleGroupItem value="dark" aria-label="深色主题"><Moon /></ToggleGroupItem><ToggleGroupItem value="system" aria-label="跟随系统"><Monitor /></ToggleGroupItem></ToggleGroup></div><Separator /><div className="settings-row"><div><h3 className="flex items-center gap-2"><EyeOff className="size-4" />隐藏金额</h3></div><Switch aria-label="隐藏金额" checked={preferences.hideAmounts} onCheckedChange={hideAmounts => update({ hideAmounts })} /></div></CardContent></Card><Card><CardContent className="settings-links">{[
       { to: '/settings/connection', icon: Network, title: '连接设置' },
       { to: '/settings/security', icon: Fingerprint, title: '登录与安全' },
       { to: '/settings/preferences', icon: SlidersHorizontal, title: '刷新与统计' },
       { to: '/settings/app', icon: Smartphone, title: '应用与数据' },
-    ].map(item => <Link key={item.to} to={item.to} className="settings-link"><item.icon className="size-5" /><div><h3>{item.title}</h3></div><ChevronRight className="size-4" /></Link>)}</CardContent></Card></> : path.endsWith('/connection') ? <ConnectionSettings /> : path.endsWith('/preferences') ? <><RefreshSettings /><StatisticsSettings /></> : path.endsWith('/security') ? <><EntryVerificationSettings /><PasskeySettings /></> : <AppSettings />}</div>
+    ].map(item => <Link key={item.to} to={item.to} className="settings-link"><item.icon className="size-5" /><div><h3>{item.title}</h3></div>{item.to === '/settings/app' && needRefresh && <Badge variant="secondary">可更新</Badge>}<ChevronRight className="size-4" /></Link>)}</CardContent></Card></> : path.endsWith('/connection') ? <ConnectionSettings /> : path.endsWith('/preferences') ? <><RefreshSettings /><StatisticsSettings /></> : path.endsWith('/security') ? <><EntryVerificationSettings /><PasskeySettings /></> : <AppSettings />}</div>
 }
 function EntryVerificationSettings() {
   const { preferences, update, isSaving } = useWorkspace()
@@ -89,5 +91,5 @@ function AppSettings() {
     } catch (error) { toast.error(error instanceof z.ZodError ? '配置文件格式无效' : (error as Error).message) }
     if (inputRef.current) inputRef.current.value = ''
   }
-  return <><Card><CardHeader><CardTitle>添加到主屏幕</CardTitle></CardHeader><CardContent><InstallHelp /></CardContent></Card><Card><CardHeader><CardTitle>配置备份</CardTitle></CardHeader><CardContent><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={exportPreferences}><Download data-icon="inline-start" />导出配置</Button><Button variant="outline" onClick={() => inputRef.current?.click()}><Upload data-icon="inline-start" />导入配置</Button><input ref={inputRef} type="file" accept=".json,application/json" className="hidden" aria-label="导入配置文件" onChange={e => void importPreferences(e.target.files?.[0])} /></div><p className="text-sm text-muted-foreground mt-4">导入将替换当前配置。</p></CardContent></Card><div className="app-version"><span>Sub2api Manager</span><Badge variant="outline">v0.1.0</Badge></div></>
+  return <><AppUpdateCard /><Card><CardHeader><CardTitle>添加到主屏幕</CardTitle></CardHeader><CardContent><InstallHelp /></CardContent></Card><Card><CardHeader><CardTitle>配置备份</CardTitle></CardHeader><CardContent><div className="flex flex-wrap gap-3"><Button variant="outline" onClick={exportPreferences}><Download data-icon="inline-start" />导出配置</Button><Button variant="outline" onClick={() => inputRef.current?.click()}><Upload data-icon="inline-start" />导入配置</Button><input ref={inputRef} type="file" accept=".json,application/json" className="hidden" aria-label="导入配置文件" onChange={e => void importPreferences(e.target.files?.[0])} /></div><p className="text-sm text-muted-foreground mt-4">导入将替换当前配置。</p></CardContent></Card><div className="app-version"><span>Sub2api Manager</span><Badge variant="outline">v0.1.0</Badge></div></>
 }

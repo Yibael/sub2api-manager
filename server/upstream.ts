@@ -3,7 +3,7 @@ import { object } from './normalize'
 export class UpstreamError extends Error {
   constructor(public readonly status: number, message: string, public readonly retryAt?: number) { super(message) }
 }
-export interface Upstream { request(path: string, options?: { query?: Record<string, string>; body?: unknown; signal?: AbortSignal; method?: 'PUT' }): Promise<unknown> }
+export interface Upstream { request(path: string, options?: { query?: Record<string, string>; body?: unknown; signal?: AbortSignal; method?: 'PUT' | 'POST' }): Promise<unknown> }
 
 export function createUpstream(baseUrl: string, key: string, allowHTTP = false): Upstream {
   const url = new URL(baseUrl)

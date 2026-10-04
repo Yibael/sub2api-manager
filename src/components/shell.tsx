@@ -8,7 +8,7 @@ import { pageSession, bindPageLifecycle } from '@/lib/page-session'
 import { PreferencesMigration } from '@/components/preferences-migration'
 import { PreferencesProvider, useWorkspace } from '@/lib/preferences'
 import { Brand, ErrorNotice } from '@/components/common'
-import { PwaUpdate } from '@/components/pwa'
+import { usePwaUpdate } from '@/lib/pwa'
 import { Badge } from '@/components/ui/badge'
 import { Button } from '@/components/ui/button'
 import { LoadingValue, LoginSkeleton, RouteSkeleton, StableRegion } from '@/components/loading'
@@ -38,11 +38,12 @@ function Shell() {
     window.addEventListener('online', on); window.addEventListener('offline', off)
     return () => { window.removeEventListener('online', on); window.removeEventListener('offline', off) }
   }, [])
-  return <AppFrame pins={preferences.pins.length}><PwaUpdate /><StableRegion><PreferencesMigration /></StableRegion><StableRegion>{!online && <div className="mb-5"><ErrorNotice message="网络已断开" /></div>}</StableRegion><StableRegion phase={phase}><Outlet /></StableRegion></AppFrame>
+  return <AppFrame pins={preferences.pins.length}><StableRegion><PreferencesMigration /></StableRegion><StableRegion>{!online && <div className="mb-5"><ErrorNotice message="网络已断开" /></div>}</StableRegion><StableRegion phase={phase}><Outlet /></StableRegion></AppFrame>
 }
 function AppFrame({ children, pins }: { children: ReactNode; pins?: number }) {
+  const { needRefresh } = usePwaUpdate()
   const pathname = useRouterState({ select: state => state.location.pathname })
   const current = navigation.find(item => item.to === '/' ? pathname === '/' : pathname.startsWith(item.to) || item.to === '/accounts' && pathname === '/groups') ?? navigation[0]
-  return <div className="app-shell"><aside className="desktop-sidebar"><Link to="/" replace aria-label="返回概览"><Brand /></Link><nav aria-label="主导航" className="desktop-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace className="nav-item" data-active={current.to === item.to}><item.icon /><span>{item.label}</span>{item.to === '/accounts' && <Badge variant="secondary" className="ml-auto tabular-nums"><LoadingValue loading={pins === undefined}>{pins}</LoadingValue></Badge>}</Link>)}</nav><div className="sidebar-bottom"><Link className="nav-item" to="/settings/app"><Download /><span>安装应用</span></Link></div></aside>
-    <div className="app-main"><main className="main-content">{children}</main></div><nav aria-label="移动导航" className="mobile-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace data-active={current.to === item.to}><item.icon /><span>{item.label}</span></Link>)}</nav></div>
+  return <div className="app-shell"><aside className="desktop-sidebar"><Link to="/" replace aria-label="返回概览"><Brand /></Link><nav aria-label="主导航" className="desktop-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace className="nav-item" data-active={current.to === item.to}><item.icon /><span>{item.label}</span>{item.to === '/accounts' && <Badge variant="secondary" className="ml-auto tabular-nums"><LoadingValue loading={pins === undefined}>{pins}</LoadingValue></Badge>}{item.to === '/settings' && needRefresh && <Badge variant="secondary" className="ml-auto">可更新</Badge>}</Link>)}</nav><div className="sidebar-bottom"><Link className="nav-item" to="/settings/app"><Download /><span>安装应用</span></Link></div></aside>
+    <div className="app-main"><main className="main-content">{children}</main></div><nav aria-label="移动导航" className="mobile-nav">{navigation.map(item => <Link key={item.to} to={item.to} replace data-active={current.to === item.to} aria-label={item.to === '/settings' && needRefresh ? '设置，有更新可用' : undefined}><span className="relative"><item.icon />{item.to === '/settings' && needRefresh && <Badge variant="default" className="absolute -top-1 -right-1.5 size-2.5 p-0" aria-hidden="true" />}</span><span>{item.label}</span></Link>)}</nav></div>
 }

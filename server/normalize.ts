@@ -1,5 +1,7 @@
 import type { Account, Quota, TodayStats, Usage } from '../shared/domain'
 import { MoneyDecimal, normalizeMoney } from '../shared/money'
+import type { AccountBenefits, BenefitSample, CodexCredits, ReferralCapacity, ResetCredits } from '../shared/benefits'
+import type { AutoResetConfig } from '../shared/auto-reset'
 
 export type Raw = Record<string, unknown>
 export const object = (value: unknown): Raw => value && typeof value === 'object' && !Array.isArray(value) ? value as Raw : {}
@@ -7,6 +9,52 @@ export const number = (value: unknown): number | null => typeof value === 'numbe
 export const string = (value: unknown): string | null => typeof value === 'string' ? value : null
 const date = (value: unknown) => typeof value === 'string' && Number.isFinite(Date.parse(value)) ? value : null
 const count = (value: unknown) => { const n = number(value); return n !== null && Number.isSafeInteger(n) ? n : null }
+export function benefitSample<T>(data: T | null, updatedAt: number | null = null): BenefitSample<T> {
+  return { data, updatedAt, error: null, warning: null }
+}
+export function fetchedAt(value: unknown): number | null {
+  const seconds = count(value)
+  return seconds && Number.isFinite(new Date(seconds * 1000).getTime()) ? seconds * 1000 : null
+}
+export function normalizeResetCredits(value: unknown): ResetCredits | null {
+  const raw = object(value), availableCount = count(raw.available_count)
+  if (availableCount === null) return null
+  const expiresAt = Array.isArray(raw.credits) ? raw.credits.flatMap(credit => {
+    const time = date(object(credit).expires_at)
+    return time ? [new Date(time).toISOString()] : []
+  }).sort() : []
+  return { availableCount, expiresAt }
+}
+export function normalizeCredits(value: unknown): CodexCredits | null {
+  const raw = object(value)
+  if (typeof raw.has_credits !== 'boolean' || typeof raw.unlimited !== 'boolean') return null
+  return { hasCredits: raw.has_credits, unlimited: raw.unlimited,
+    balance: typeof raw.balance === 'string' && raw.balance.length <= 200 ? normalizeMoney(raw.balance) : null }
+}
+export function normalizeReferrals(value: unknown): ReferralCapacity | null {
+  const raw = object(value)
+  if (typeof raw.should_show !== 'boolean' && count(raw.available_invites) === null) return null
+  return { availableInvites: raw.should_show === false ? 0 : count(raw.available_invites) }
+}
+export function normalizeBenefits(extra: Raw): AccountBenefits {
+  const credits = object(extra.codex_credits_snapshot), referrals = object(extra.codex_referral_snapshot)
+  return {
+    resetCredits: benefitSample(normalizeResetCredits(extra.codex_reset_credit_snapshot)),
+    credits: benefitSample(normalizeCredits(credits.credits), fetchedAt(credits.fetched_at)),
+    referrals: benefitSample(normalizeReferrals(referrals), fetchedAt(referrals.fetched_at)),
+  }
+}
+export function resetThreshold(value: unknown): number | null {
+  const parsed = typeof value === 'number' ? value : typeof value === 'string' && /^[+-]?(?:\d+(?:\.\d*)?|\.\d+)(?:e[+-]?\d+)?$/i.test(value.trim()) ? Number(value) : NaN
+  return Number.isFinite(parsed) && parsed >= 0.001 && parsed <= 1 ? parsed : null
+}
+export function normalizeAutoReset(raw: Raw): AutoResetConfig | null {
+  if (raw.platform !== 'openai' || raw.type !== 'oauth' || raw.parent_account_id != null) return null
+  const extra = object(raw.extra)
+  const enabled = extra.auto_reset_credit_enabled
+  return { enabled: enabled === true || typeof enabled === 'number' && enabled !== 0 || typeof enabled === 'string' && ['1', 't', 'T', 'TRUE', 'true', 'True'].includes(enabled.trim()),
+    threshold5h: resetThreshold(extra.auto_reset_credit_5h_threshold) ?? 1, threshold7d: resetThreshold(extra.auto_reset_credit_7d_threshold) ?? 1 }
+}
 export function normalizeAccount(value: unknown): Account {
   const raw = object(value)
   const id = count(raw.id)
@@ -37,7 +85,8 @@ export function normalizeAccount(value: unknown): Account {
     schedulable: typeof raw.schedulable === 'boolean' ? raw.schedulable : null,
     concurrency: count(raw.concurrency), currentConcurrency: count(raw.current_concurrency),
     rateLimitResetAt: date(raw.rate_limit_reset_at), overloadUntil: date(raw.overload_until),
-    tempUnschedulableUntil: date(raw.temp_unschedulable_until), supportsUsage, localQuotas }
+    tempUnschedulableUntil: date(raw.temp_unschedulable_until), supportsUsage, localQuotas,
+    benefits: platform === 'openai' && type === 'oauth' ? normalizeBenefits(extra) : null, autoReset: normalizeAutoReset(raw) }
 }
 export function normalizeToday(value: unknown): TodayStats {
   if (!value || typeof value !== 'object') throw new Error('今日统计暂不可用')

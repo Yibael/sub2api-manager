@@ -10,6 +10,8 @@ import { AccountBadges, AccountStatusBadges } from '@/components/account-badges'
 import { SubscriptionEditor } from '@/components/subscription-editor'
 import { Card, CardContent, CardHeader, CardTitle, CardDescription, CardAction } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { AccountBenefitsCard } from '@/components/account-benefits'
+import { AccountAutoResetCard } from '@/components/account-auto-reset'
 
 export function DetailPage() {
   const { id: rawId } = useParams({ from: '/accounts/$id' }), id = Number(rawId)
@@ -38,6 +40,8 @@ export function DetailPage() {
           <Card><CardHeader><CardTitle>额度</CardTitle></CardHeader><CardContent><QuotaList quotas={account.supportsUsage ? usage?.data?.windows ?? [] : account.localQuotas} pending={account.supportsUsage && !usage?.data && !usage?.error && !monitor.quota.error} empty={account.supportsUsage ? '暂无可用额度数据' : '未配置额度'} now={monitor.now} estimatedCost={weeklyEstimate} /></CardContent></Card>
           <Card><CardHeader><CardTitle>今日</CardTitle></CardHeader><CardContent><dl className="data-list"><div><dt>今日标准用量</dt><dd><Money value={today?.data?.standardCost} loading={todayPending} /></dd></div><div><dt>今日消费</dt><dd><Money value={consumption?.error ? null : consumption?.data} currency={preferences.actualCurrency} loading={!consumption && !monitor.dailySpending.error} /></dd></div></dl><ErrorNotice message={consumption?.error ?? monitor.dailySpending.error?.message} /></CardContent></Card>
         </div>
+        {account.benefits && <AccountBenefitsCard key={account.id} account={account} now={monitor.now} />}
+        {account.benefits && <AccountAutoResetCard key={`auto-reset-${account.id}`} account={account} stale={!!sample?.error || !!monitor.status.error} />}
         {account.type === 'oauth' && <Card><CardHeader><CardTitle>周期</CardTitle><CardDescription className="min-h-5"><LoadingValue loading={spendingPending}>{spending ? `${spending.cycle.start} — ${spending.cycle.end}` : null}</LoadingValue></CardDescription><CardAction><Button variant="outline" onClick={() => setEditing(true)}><CreditCard data-icon="inline-start" />编辑订阅</Button></CardAction></CardHeader><CardContent><dl className="data-list"><div><dt>成本</dt><dd><Money value={subscription?.price} currency={preferences.costCurrency} /></dd></div><div><dt>周期消费</dt><dd><Money value={spending?.spending.data} currency={preferences.actualCurrency} loading={spendingPending} /></dd></div></dl><ErrorNotice message={spending?.spending.error ?? monitor.spending.error?.message} /></CardContent></Card>}
       </>}
     </StableRegion>

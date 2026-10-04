@@ -5,13 +5,18 @@ import { normalizeAccount, normalizeToday, normalizeUsage, object } from './norm
 import { UpstreamError, type Upstream } from './upstream'
 import { Rankings } from './rankings'
 import { Groups } from './groups'
+import { Benefits } from './benefits'
+import { AutoReset } from './auto-reset'
+import type { AutoResetConfig } from '../shared/auto-reset'
 
 interface SpendingScope { force: boolean; costs: Map<string, Promise<Sample<string>>>; admins?: Promise<Sample<number[]>> }
 
 export class Monitor {
   readonly groupManagement: Groups
+  readonly accountBenefits: Benefits
+  readonly accountAutoReset: AutoReset
   private directoryCache = new DemandCache<Account[]>()
-  private accountsCache = new DemandCache<Account>()
+  private accountsCache = new DemandCache<{ account: Account; readStartedAt: number }>()
   private todayCache = new DemandCache<{ day: string; stats: TodayStats }>()
   private usageCache = new DemandCache<Usage>()
   private costCache = new DemandCache<string>()
@@ -21,6 +26,11 @@ export class Monitor {
   private userRankings: Rankings
   constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {
     this.groupManagement = new Groups(upstream)
+    this.accountBenefits = new Benefits(upstream, async id => (await this.detailSamples([id]))[id])
+    this.accountAutoReset = new AutoReset(upstream, () => {
+      this.directoryCache = new DemandCache<Account[]>()
+      this.accountsCache = new DemandCache<{ account: Account; readStartedAt: number }>()
+    })
     this.userRankings = new Rankings(upstream, () => this.intervals, serverTimeZone, (signal, force) => this.admins(signal, force))
   }
 
@@ -46,17 +56,37 @@ export class Monitor {
     }
     throw new Error('目录超过可读取范围')
   }
-  accounts(force = false) {
-    return this.directoryCache.get('directory', 60_000, async () => (await this.directory('accounts', AbortSignal.timeout(30_000))).map(normalizeAccount), force)
+  async accounts(force = false): Promise<Sample<Account[]>> {
+    const cache = this.directoryCache
+    const result = await cache.get('directory', 60_000, async () => (await this.directory('accounts', AbortSignal.timeout(30_000))).map(normalizeAccount), force)
+    return cache === this.directoryCache ? result : this.accounts()
   }
-  details(ids: number[], signal = AbortSignal.timeout(30_000), force = false) {
-    return this.accountsCache.getMany(ids.map(String), this.intervals.status * 1000, async missing => new Map<string, Account | Error>(await Promise.all(missing.map(async id => {
+  private async detailSamples(ids: number[], signal = AbortSignal.timeout(30_000), force = false): Promise<Record<number, Sample<Account> & { readStartedAt: number | null }>> {
+    const cache = this.accountsCache
+    const samples = await cache.getMany(ids.map(String), this.intervals.status * 1000, async missing => new Map<string, { account: Account; readStartedAt: number } | Error>(await Promise.all(missing.map(async id => {
+      const readStartedAt = Date.now()
       try {
         const account = normalizeAccount(await this.upstream.request(`accounts/${id}`, { signal }))
         if (account.id !== Number(id)) throw new Error('账号响应不匹配')
-        return [id, account] as const
+        return [id, { account, readStartedAt }] as const
       } catch (error) { return [id, error as Error] as const }
     }))), force)
+    if (cache !== this.accountsCache) return this.detailSamples(ids, signal)
+    return Object.fromEntries(ids.map(id => {
+      const sample = samples[id]
+      return [id, { ...sample, data: sample.data?.account ?? null, readStartedAt: sample.data?.readStartedAt ?? null }]
+    }))
+  }
+  async details(ids: number[], signal = AbortSignal.timeout(30_000), force = false) {
+    const samples = await this.detailSamples(ids, signal, force)
+    return Object.fromEntries(ids.map(id => {
+      const { readStartedAt: _, ...sample } = samples[id]
+      return [id, sample]
+    }))
+  }
+  async autoResetConfig(id: number): Promise<Sample<AutoResetConfig>> {
+    const sample = (await this.details([id]))[id]
+    return { ...sample, data: sample.data?.autoReset ?? null }
   }
   async today(ids: number[], force = false) {
     const day = dateInZone(new Date(), this.serverTimeZone)

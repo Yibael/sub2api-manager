@@ -8,6 +8,9 @@ import type { Monitor } from './monitor'
 import { WorkspaceStore, WorkspaceConflict } from './workspace'
 import { Passkeys, PasskeyError } from './passkeys'
 import { GroupError } from './groups'
+import { BenefitsError } from './benefits'
+import { AutoResetError } from './auto-reset'
+import { autoResetRequestSchema } from '../shared/auto-reset'
 import { groupRateRequestSchema } from '../shared/groups'
 
 export interface AppOptions {
@@ -56,8 +59,8 @@ export function createApp(options: AppOptions) {
       }
     })
     .onError(({ code, error, set }) => {
-      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError || error instanceof GroupError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
-      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError || error instanceof GroupError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
+      set.status = error instanceof WorkspaceConflict ? 409 : error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError ? error.status : code === 'VALIDATION' ? 422 : code === 'NOT_FOUND' ? 404 : 500
+      return { error: error instanceof WorkspaceConflict || error instanceof PasskeyError || error instanceof GroupError || error instanceof BenefitsError || error instanceof AutoResetError ? error.message : code === 'VALIDATION' ? '请求参数无效，请检查输入' : code === 'NOT_FOUND' ? '接口不存在' : '操作失败，请稍后重试' }
     })
     .get('/config', ({ cookie, request }): PublicConfig => {
       const auth = authenticated(cookie[sessionName].value, pageToken(request))
@@ -133,6 +136,18 @@ export function createApp(options: AppOptions) {
       return { ok: true }
     }, { body: z.object({ id: z.string().min(1).max(2048) }) })
     .get('/accounts', ({ query }) => options.monitor!.accounts(query.force === 'true'), { beforeHandle: requireMonitor })
+    .get('/accounts/:id/benefits', ({ params }) => options.monitor!.accountBenefits.read(params.id), { params: groupParams, beforeHandle: requireMonitor })
+    .get('/accounts/:id/benefits/quota', ({ params }) => options.monitor!.accountBenefits.readQuota(params.id), { params: groupParams, beforeHandle: requireMonitor })
+    .post('/accounts/:id/benefits/quota', ({ params }) => options.monitor!.accountBenefits.readQuota(params.id, true), { params: groupParams, body: z.object({}).strict(), beforeHandle: requireMonitor })
+    .get('/accounts/:id/benefits/referrals', ({ params }) => options.monitor!.accountBenefits.readReferrals(params.id), { params: groupParams, beforeHandle: requireMonitor })
+    .post('/accounts/:id/benefits/referrals', ({ params }) => options.monitor!.accountBenefits.readReferrals(params.id, true), { params: groupParams, body: z.object({}).strict(), beforeHandle: requireMonitor })
+    .get('/accounts/:id/auto-reset', ({ params }) => options.monitor!.autoResetConfig(params.id), { params: groupParams, beforeHandle: requireMonitor })
+    .post('/accounts/:id/auto-reset/preview', ({ params, body, cookie }) => options.monitor!.accountAutoReset.prepare(params.id, body.enabled, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: autoResetRequestSchema, beforeHandle: requireMonitor })
+    .post('/accounts/:id/auto-reset/cancel', ({ params, body, cookie }) => {
+      options.monitor!.accountAutoReset.cancel(params.id, body.token, sessionKey(cookie[sessionName].value as string))
+      return { ok: true }
+    }, { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
+    .put('/accounts/:id/auto-reset', ({ params, body, cookie }) => options.monitor!.accountAutoReset.confirm(params.id, body.token, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupConfirmation, beforeHandle: requireMonitor })
     .get('/groups', ({ query }) => options.monitor!.groupManagement.list(query.force === 'true'), { beforeHandle: requireMonitor })
     .post('/groups/:id/rate/preview', ({ params, body, cookie }) => options.monitor!.groupManagement.prepare(params.id, body.rateMultiplier, sessionKey(cookie[sessionName].value as string)), { params: groupParams, body: groupRateRequestSchema, beforeHandle: requireMonitor })
     .post('/groups/:id/rate/cancel', ({ params, body, cookie }) => {

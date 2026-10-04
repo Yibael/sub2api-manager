@@ -4,6 +4,13 @@ import { DemandCache } from '../server/cache'
 
 afterEach(() => { vi.unstubAllGlobals(); vi.useRealTimers() })
 describe('upstream transport', () => {
+  it('sends an explicit POST refresh without a fabricated request body', async () => {
+    const fetch = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { fetched_at: 1 } }))
+    vi.stubGlobal('fetch', fetch)
+    await createUpstream('https://upstream.example', 'key').request('openai/accounts/1/quota/refresh', { method: 'POST' })
+    expect(fetch.mock.calls[0][1]).toMatchObject({ method: 'POST', body: undefined, redirect: 'manual' })
+    expect(fetch).toHaveBeenCalledTimes(1)
+  })
   it('sends explicit PUT mutations once with their JSON body', async () => {
     const fetch = vi.fn().mockResolvedValue(Response.json({ code: 0, data: { id: 1, rate_multiplier: 0.125 } }))
     vi.stubGlobal('fetch', fetch)

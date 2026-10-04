@@ -4,7 +4,7 @@ import { z } from 'zod'
 import { ArrowRight, Unplug, Fingerprint } from 'lucide-react'
 import { useQueryClient } from '@tanstack/react-query'
 import { signInWithPasskey, browserSupportsWebAuthn, passkeyMessage } from '@/lib/passkeys'
-import { PwaUpdate } from '@/components/pwa'
+import { AppUpdateCard } from '@/components/pwa'
 import { Spinner } from '@/components/ui/spinner'
 import { loginWithPassword } from '@/lib/api'
 import { pageSession } from '@/lib/page-session'
@@ -44,7 +44,6 @@ export function SetupPage({ config }: { config: PublicConfig }) {
     <main className="setup-screen">
       <div className="setup-panel">
         <Brand />
-        <PwaUpdate />
         <StableRegion><Card>
           <CardHeader><CardTitle>{config.configured ? '登录' : '连接设置'}</CardTitle></CardHeader>
           <CardContent>
@@ -75,6 +74,7 @@ export function SetupPage({ config }: { config: PublicConfig }) {
             )}
           </CardContent>
         </Card></StableRegion>
+        <AppUpdateCard />
       </div>
     </main>
   )

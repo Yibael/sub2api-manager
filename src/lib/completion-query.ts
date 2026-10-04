@@ -19,10 +19,10 @@ export function forceQuery<T>(client: QueryClient, key: QueryKey, load: (signal:
   void request.finally(() => { if (forced.get(id) === request) forced.delete(id) }).catch(() => {})
   return request
 }
-export function useCompletionQuery<T>(key: QueryKey, seconds: number, enabled: boolean, load: (force: boolean, signal: AbortSignal) => Promise<T>) {
+export function useCompletionQuery<T>(key: QueryKey, seconds: number, enabled: boolean, load: (force: boolean, signal: AbortSignal) => Promise<T>, options: { refetchOnMount?: boolean | 'always' } = {}) {
   const [forcing, setForcing] = useState(false)
   const query = useQuery({ queryKey: key, queryFn: ({ signal }) => load(false, signal), enabled,
-    staleTime: seconds * 1000, refetchInterval: false, refetchOnWindowFocus: false, refetchOnReconnect: true, meta: { poll: true } })
+    staleTime: seconds * 1000, refetchInterval: false, refetchOnWindowFocus: false, refetchOnReconnect: true, meta: { poll: true }, ...options })
   const { fetchStatus, refetch } = query
   const completedAt = Math.max(query.dataUpdatedAt, query.errorUpdatedAt)
   const identity = JSON.stringify(key)

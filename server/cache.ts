@@ -8,6 +8,8 @@ export class DemandCache<T> {
   private entries = new Map<string, Entry<T>>()
   constructor(private readonly maxEntries = 5000, private readonly now = () => Date.now()) {}
 
+  peek(key: string): Sample<T> | undefined { return this.entries.get(key)?.sample }
+
   async get(key: string, intervalMs: number, load: () => Promise<T>, force = false): Promise<Sample<T>> {
     const result = await this.getMany([key], intervalMs, async () => {
       try { return new Map([[key, await load()]]) } catch (error) { return new Map([[key, safeError(error)]]) }
