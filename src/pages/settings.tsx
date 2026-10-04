@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState } from 'react'
+import { useEffect, useMemo, useRef, useState } from 'react'
 import { Link, useRouterState } from '@tanstack/react-router'
 import { useForm } from '@tanstack/react-form'
 import { ChevronRight, Network, RefreshCw, Smartphone, Moon, Sun, Monitor, Download, Upload, LogOut, EyeOff, ShieldCheck, SlidersHorizontal, Fingerprint } from 'lucide-react'
@@ -70,12 +70,43 @@ function RefreshSettings() {
   return <Card><CardHeader><CardTitle>刷新间隔</CardTitle></CardHeader><CardContent><form onSubmit={e => { e.preventDefault(); void form.handleSubmit() }}><FieldGroup>{fields.map(item => <form.Field key={item.key} name={item.key}>{field => <Field><FieldLabel htmlFor={`interval-${item.key}`}>{item.label}</FieldLabel><Select value={String(field.state.value)} onValueChange={v => field.handleChange(Number(v) as Intervals[typeof item.key])}><SelectTrigger id={`interval-${item.key}`} className="w-full"><SelectValue /></SelectTrigger><SelectContent><SelectGroup>{item.values.map(value => <SelectItem key={value} value={String(value)}>{value} 秒</SelectItem>)}</SelectGroup></SelectContent></Select></Field>}</form.Field>)}</FieldGroup><div className="form-actions"><form.Subscribe selector={state => state.isSubmitting}>{pending => <Button disabled={pending} type="submit">{pending && <Spinner data-icon="inline-start" />}保存刷新设置</Button>}</form.Subscribe></div><ErrorNotice message={error} /></form></CardContent></Card>
 }
 function StatisticsSettings() {
-  const { preferences, update, revision, getRevision, getPreferences } = useWorkspace()
+  const { preferences, update, revision, getRevision, getPreferences, isSaving } = useWorkspace()
   const baseRevision = useRef(revision)
   const schema = preferencesSchema.pick({ timeZone: true, actualCurrency: true, costCurrency: true, includeAdmin: true })
-  const form = useForm({ defaultValues: { timeZone: preferences.timeZone, actualCurrency: preferences.actualCurrency, costCurrency: preferences.costCurrency, includeAdmin: preferences.includeAdmin }, validators: { onSubmit: schema }, onSubmit: async ({ value }) => { if (await update(value, baseRevision.current)) { baseRevision.current = getRevision(); form.reset(value); toast.success('已保存') } else if (baseRevision.current !== getRevision()) { form.reset(schema.parse(getPreferences())); baseRevision.current = getRevision() } } })
-  useEffect(() => { if (!form.state.isDirty) { form.reset({ timeZone: preferences.timeZone, actualCurrency: preferences.actualCurrency, costCurrency: preferences.costCurrency, includeAdmin: preferences.includeAdmin }); baseRevision.current = revision } }, [preferences.timeZone, preferences.actualCurrency, preferences.costCurrency, preferences.includeAdmin, revision, form])
-  return <Card><CardHeader><CardTitle>消费统计口径</CardTitle></CardHeader><CardContent><form onSubmit={e => { e.preventDefault(); void form.handleSubmit() }}><FieldGroup>{([{ name: 'timeZone', label: '统计时区', placeholder: 'Asia/Shanghai' }, { name: 'actualCurrency', label: '消费货币符号', placeholder: '$' }, { name: 'costCurrency', label: '成本货币符号', placeholder: '$' }] as const).map(item => <form.Field key={item.name} name={item.name}>{field => <Field data-invalid={!field.state.meta.isValid}><FieldLabel htmlFor={item.name}>{item.label}</FieldLabel><Input id={item.name} value={field.state.value} placeholder={item.placeholder} onBlur={field.handleBlur} onChange={e => field.handleChange(e.target.value)} aria-invalid={!field.state.meta.isValid} /><FieldError errors={field.state.meta.errors} /></Field>}</form.Field>)}<form.Field name="includeAdmin">{field => <Field orientation="horizontal"><FieldLabel htmlFor="include-admin">包含 Admin 消费</FieldLabel><Switch id="include-admin" checked={field.state.value} onCheckedChange={field.handleChange} /></Field>}</form.Field><FieldDescription>货币符号不进行汇率换算。</FieldDescription></FieldGroup><div className="form-actions"><form.Subscribe selector={state => state.isSubmitting}>{pending => <Button disabled={pending} aria-busy={pending} type="submit">{pending && <Spinner data-icon="inline-start" />}保存统计设置</Button>}</form.Subscribe></div></form></CardContent></Card>
+    .extend({ includeAdminInRankings: z.boolean() })
+  const { timeZone, actualCurrency, costCurrency, includeAdmin, includeAdminInRankings } = preferences
+  const values = useMemo(() => ({ timeZone, actualCurrency, costCurrency, includeAdmin, includeAdminInRankings }),
+    [timeZone, actualCurrency, costCurrency, includeAdmin, includeAdminInRankings])
+  const form = useForm({ defaultValues: values, validators: { onSubmit: schema }, onSubmit: async ({ value }) => {
+    if (await update(value, baseRevision.current)) { baseRevision.current = getRevision(); form.reset(value); toast.success('已保存') }
+    else if (baseRevision.current !== getRevision()) { form.reset(schema.parse(getPreferences())); baseRevision.current = getRevision() }
+  } })
+  useEffect(() => { if (!form.state.isDirty) { form.reset(values); baseRevision.current = revision } }, [values, revision, form])
+  return <Card><CardHeader><CardTitle>消费统计口径</CardTitle></CardHeader><CardContent>
+    <form onSubmit={event => { event.preventDefault(); void form.handleSubmit() }}>
+      <FieldGroup>
+        {([{ name: 'timeZone', label: '统计时区', placeholder: 'Asia/Shanghai' }, { name: 'actualCurrency', label: '消费货币符号', placeholder: '$' }, { name: 'costCurrency', label: '成本货币符号', placeholder: '$' }] as const).map(item =>
+          <form.Field key={item.name} name={item.name}>{field => <Field data-invalid={!field.state.meta.isValid}>
+            <FieldLabel htmlFor={item.name}>{item.label}</FieldLabel>
+            <Input id={item.name} value={field.state.value} placeholder={item.placeholder} onBlur={field.handleBlur} onChange={event => field.handleChange(event.target.value)} aria-invalid={!field.state.meta.isValid} />
+            <FieldError errors={field.state.meta.errors} />
+          </Field>}</form.Field>)}
+        <form.Field name="includeAdmin">{field => <Field orientation="horizontal" data-disabled={isSaving}>
+          <FieldContent><FieldLabel htmlFor="include-admin">包含 Admin 消费</FieldLabel><FieldDescription>关闭后，可单独设置榜单口径。</FieldDescription></FieldContent>
+          <Switch id="include-admin" checked={field.state.value} disabled={isSaving} onCheckedChange={field.handleChange} />
+        </Field>}</form.Field>
+        <form.Subscribe selector={state => state.values.includeAdmin}>{included => !included &&
+          <form.Field name="includeAdminInRankings">{field => <Field orientation="horizontal" data-disabled={isSaving}>
+            <FieldContent><FieldLabel htmlFor="include-admin-in-rankings">榜单中包含 Admin 消费</FieldLabel><FieldDescription>同时适用于消费榜和模型榜。</FieldDescription></FieldContent>
+            <Switch id="include-admin-in-rankings" checked={field.state.value} disabled={isSaving} onCheckedChange={field.handleChange} />
+          </Field>}</form.Field>}
+        </form.Subscribe>
+      </FieldGroup>
+      <div className="form-actions"><form.Subscribe selector={state => state.isSubmitting}>{pending =>
+        <Button disabled={pending} aria-busy={pending} type="submit">{pending && <Spinner data-icon="inline-start" />}保存统计设置</Button>}
+      </form.Subscribe></div>
+    </form>
+  </CardContent></Card>
 }
 function AppSettings() {
   const { config, preferences, update } = useWorkspace(), inputRef = useRef<HTMLInputElement>(null)

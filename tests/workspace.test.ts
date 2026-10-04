@@ -4,8 +4,33 @@ import { join } from 'node:path'
 import { describe, expect, it } from 'vitest'
 import { WorkspaceStore } from '../server/workspace'
 import { createApp } from '../server/app'
+import { rankingsIncludeAdmin, workspacePreferencesPatchSchema } from '../shared/preferences'
 
 describe('persistent workspace', () => {
+  it('defaults legacy rankings to include Admin and preserves the child choice through parent toggles and unrelated patches', async () => {
+    const directory = await mkdtemp(join(tmpdir(), 'sub2api-workspace-test-'))
+    try {
+      const path = join(directory, 'workspace.json'), store = await WorkspaceStore.open(path, 'UTC', 'ranking-test')
+      await store.update(0, { includeAdmin: false })
+      const legacy = JSON.parse(await readFile(path, 'utf8'))
+      delete legacy.preferences.includeAdminInRankings
+      await writeFile(path, JSON.stringify(legacy))
+      const reopened = await WorkspaceStore.open(path, 'UTC', 'ranking-test')
+      expect(reopened.snapshot().preferences).toMatchObject({ includeAdmin: false, includeAdminInRankings: true })
+      expect(rankingsIncludeAdmin(reopened.snapshot().preferences)).toBe(true)
+      await reopened.update(1, workspacePreferencesPatchSchema.parse({ includeAdminInRankings: false }))
+      expect(rankingsIncludeAdmin(reopened.snapshot().preferences)).toBe(false)
+      const parentPatch = workspacePreferencesPatchSchema.parse({ includeAdmin: true })
+      expect(parentPatch).not.toHaveProperty('includeAdminInRankings')
+      await reopened.update(2, parentPatch)
+      expect(rankingsIncludeAdmin(reopened.snapshot().preferences)).toBe(true)
+      await reopened.update(3, workspacePreferencesPatchSchema.parse({ actualCurrency: '¥' }))
+      const restored = await WorkspaceStore.open(path, 'UTC', 'ranking-test')
+      expect(restored.snapshot().preferences).toMatchObject({ includeAdmin: true, includeAdminInRankings: false, actualCurrency: '¥' })
+      await restored.update(4, workspacePreferencesPatchSchema.parse({ includeAdmin: false }))
+      expect(rankingsIncludeAdmin(restored.snapshot().preferences)).toBe(false)
+    } finally { await rm(directory, { recursive: true, force: true }) }
+  })
   it('loads legacy numeric prices and saves fractional prices as decimal strings without precision loss', async () => {
     const directory = await mkdtemp(join(tmpdir(), 'sub2api-workspace-test-'))
     try {

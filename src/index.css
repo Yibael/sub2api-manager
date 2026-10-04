@@ -309,7 +309,7 @@ button:not(:disabled), a { cursor: pointer; }
 @container ranking (min-width: 38rem) {
   .ranking-extra { display: table-cell; }
   .ranking-secondary { display: none; }
-  .ranking-row { height: 48px; }
+  .ranking-row { height: 64px; }
 }
 @container ranking (min-width: 42rem) {
   .ranking-header { flex-direction: row; align-items: center; justify-content: space-between; gap: 24px; }

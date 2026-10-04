@@ -28,3 +28,12 @@ export function formatMoney(value: unknown): string | null {
   const [whole, fraction] = new MoneyDecimal(amount).toFixed(2, MoneyDecimal.ROUND_HALF_UP).split('.')
   return whole.replace(/\B(?=(\d{3})+(?!\d))/g, ',') + '.' + fraction
 }
+
+/** Use the unrounded, full-range total supplied by the ranking response. */
+export function formatSpendingShare(value: unknown, total: unknown): string | null {
+  const amount = normalizeMoney(value), totalAmount = normalizeMoney(total)
+  if (amount === null || totalAmount === null) return null
+  const denominator = new MoneyDecimal(totalAmount)
+  if (denominator.isZero() || new MoneyDecimal(amount).gt(denominator)) return null
+  return new MoneyDecimal(amount).div(denominator).times(100).toFixed(1) + '%'
+}

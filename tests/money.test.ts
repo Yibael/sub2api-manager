@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest'
-import { formatMoney, normalizeMoney, sumMoney } from '../shared/money'
+import { formatMoney, formatSpendingShare, normalizeMoney, sumMoney } from '../shared/money'
 import { subscriptionSchema } from '../shared/domain'
 import { normalizeAccount, normalizeToday, normalizeUsage } from '../server/normalize'
 import { Monitor } from '../server/monitor'
@@ -29,6 +29,17 @@ describe('shared decimal amounts', () => {
     expect(formatMoney('1234567.895')).toBe('1,234,567.90')
     expect(formatMoney('0')).toBe('0.00')
     expect(formatMoney(sumMoney(['0.004', '0.004']))).toBe('0.01')
+  })
+  it('calculates shares from full unrounded totals and keeps a zero or invalid denominator unknown', () => {
+    expect(formatSpendingShare('0.049', '0.1')).toBe('49.0%')
+    expect(formatSpendingShare('0.00049', '0.001')).toBe('49.0%')
+    expect(formatSpendingShare('1000000000.000000000000000001', '4000000000.000000000000000004')).toBe('25.0%')
+    expect(formatSpendingShare('0.0667', '0.2')).toBe('33.4%')
+    expect(['2', '3'].map(amount => formatSpendingShare(amount, '10'))).toEqual(['20.0%', '30.0%'])
+    expect(formatSpendingShare('0', '1')).toBe('0.0%')
+    for (const total of ['0', null, undefined, '-1', 'NaN']) expect(formatSpendingShare('0', total)).toBeNull()
+    expect(formatSpendingShare(null, '1')).toBeNull()
+    expect(formatSpendingShare('2', '1')).toBeNull()
   })
   it('uses decimal amounts for normalization and quota estimates', () => {
     expect(normalizeToday({ standard_cost: '0.049', cost: '0.1', user_cost: 0.2 })).toMatchObject({ standardCost: '0.049', accountCost: '0.1', userCost: '0.2' })

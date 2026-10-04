@@ -1,15 +1,36 @@
 import { useState } from 'react'
+import { ArrowRightLeft, ChartPie, Layers } from 'lucide-react'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table'
 import { SegmentedControl } from '@/components/segmented-control'
 import { EmptyState, ErrorNotice, Money, RefreshButton } from '@/components/common'
 import { RankingSkeletonRows, StableRegion } from '@/components/loading'
 import { formatTokenCount } from '@/lib/token-count'
+import { useWorkspace } from '@/lib/preferences'
+import { Badge } from '@/components/ui/badge'
 import type { RankingRange, Sample } from '../../shared/domain'
-import type { MoneyAmount } from '../../shared/money'
+import { formatSpendingShare, type MoneyAmount } from '../../shared/money'
 
 interface UsageRank { id: string | number; name: string; amount: MoneyAmount; requests: number; tokens: number }
 interface UsageRanking { rows: UsageRank[]; totalAmount: MoneyAmount }
+
+function UsageCountBadge({ metric, value, showLabel = false }: { metric: 'tokens' | 'requests'; value: number; showLabel?: boolean }) {
+  const isToken = metric === 'tokens', Icon = isToken ? Layers : ArrowRightLeft
+  const exact = value.toLocaleString('en-US'), label = `${exact} ${isToken ? 'Token' : '次请求'}`
+  return <Badge variant="outline" className="max-w-full tabular-nums" aria-label={label} title={label}>
+    <Icon data-icon="inline-start" aria-hidden="true" />
+    <span className="truncate">{isToken ? formatTokenCount(value) : exact}{showLabel && (isToken ? ' Token' : ' 次')}</span>
+  </Badge>
+}
+
+function SpendingShareBadge({ amount, total }: { amount: MoneyAmount; total: MoneyAmount }) {
+  const { preferences } = useWorkspace()
+  const share = formatSpendingShare(amount, total)
+  const label = preferences.hideAmounts ? '消费占比已隐藏' : share === null ? '消费占比未知' : `消费占比 ${share}`
+  return <Badge variant="secondary" className="tabular-nums" aria-label={label} title={label}>
+    <ChartPie data-icon="inline-start" aria-hidden="true" />{preferences.hideAmounts ? '••••' : share ?? '—'}
+  </Badge>
+}
 
 export function UsageRankingCard<Range extends RankingRange>({ title, description, dimension, sample, error, loading, currency, ranges, range, onRangeChange, onRefresh }: {
   title: string; description: string; dimension: string; sample?: Sample<UsageRanking>; error?: string; loading: boolean; currency: string;
@@ -36,13 +57,13 @@ export function UsageRankingCard<Range extends RankingRange>({ title, descriptio
     <CardContent><StableRegion phase={`${range}:${pending ? 'pending' : 'ready'}`} busy={loading} contentClassName="flex flex-col gap-4">
       <ErrorNotice message={message} />
       {pending || ranking?.rows.length ? <Table className="table-fixed" aria-label={title}>
-        <TableHeader><TableRow><TableHead scope="col" className="w-9"><span className="sr-only">排名</span>#</TableHead><TableHead scope="col">{dimension}</TableHead><TableHead scope="col" className="w-24 text-right">消费</TableHead><TableHead scope="col" className="ranking-extra w-20 text-right">Token</TableHead><TableHead scope="col" className="ranking-extra w-16 text-right">请求</TableHead></TableRow></TableHeader>
+        <TableHeader><TableRow><TableHead scope="col" className="w-9"><span className="sr-only">排名</span>#</TableHead><TableHead scope="col">{dimension}</TableHead><TableHead scope="col" className="w-24 text-right">消费</TableHead><TableHead scope="col" className="ranking-extra w-24 text-right">Token</TableHead><TableHead scope="col" className="ranking-extra w-24 text-right">请求</TableHead></TableRow></TableHeader>
         <TableBody>{pending ? <RankingSkeletonRows count={placeholderRows} /> : ranking!.rows.map((row, index) => <TableRow key={row.id} className="ranking-row">
           <TableCell><span className="text-muted-foreground tabular-nums">{index + 1}</span></TableCell>
-          <TableCell><span className="block truncate" title={row.name}>{row.name}</span><span className="ranking-secondary"><span title={row.tokens.toLocaleString('en-US') + ' Token'} className="tabular-nums">{formatTokenCount(row.tokens)} Token</span><span className="tabular-nums">{row.requests.toLocaleString('en-US')} 次请求</span></span></TableCell>
-          <TableCell className="ranking-amount text-right"><Money value={row.amount} currency={currency} /></TableCell>
-          <TableCell className="ranking-extra text-right"><span title={row.tokens.toLocaleString('en-US') + ' Token'} className="tabular-nums">{formatTokenCount(row.tokens)}</span></TableCell>
-          <TableCell className="ranking-extra text-right"><span className="text-muted-foreground tabular-nums">{row.requests.toLocaleString('en-US')}</span></TableCell>
+          <TableCell><span className="block truncate" title={row.name}>{row.name}</span><span className="ranking-secondary"><UsageCountBadge metric="tokens" value={row.tokens} showLabel /><UsageCountBadge metric="requests" value={row.requests} showLabel /></span></TableCell>
+          <TableCell className="ranking-amount text-right"><div className="flex flex-col items-end gap-1"><Money value={row.amount} currency={currency} /><SpendingShareBadge amount={row.amount} total={ranking!.totalAmount} /></div></TableCell>
+          <TableCell className="ranking-extra text-right"><UsageCountBadge metric="tokens" value={row.tokens} /></TableCell>
+          <TableCell className="ranking-extra text-right"><UsageCountBadge metric="requests" value={row.requests} /></TableCell>
         </TableRow>)}</TableBody>
       </Table> : <EmptyState title={message ? `${title}暂不可用` : '暂无用量记录'} />}
       {pending && <span className="sr-only" role="status">正在读取排行榜</span>}

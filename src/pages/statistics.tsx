@@ -1,6 +1,7 @@
-import { CalendarDays, Coins, Wallet } from 'lucide-react'
+import { CalendarDays, Coins, ShieldCheck, Wallet } from 'lucide-react'
 import { Link } from '@tanstack/react-router'
 import { sumMoney } from '../../shared/money'
+import { rankingsIncludeAdmin } from '../../shared/preferences'
 import { useMemo, useState } from 'react'
 import { useWorkspace } from '@/lib/preferences'
 import { useMonitor } from '@/lib/monitor'
@@ -14,6 +15,7 @@ import { EmptyState, ErrorNotice, Metric, Money, NoPins, PageHeading, RefreshBut
 import { spendingTotal } from './dashboard'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
+import { Badge } from '@/components/ui/badge'
 
 export function StatisticsPage() {
   const { preferences } = useWorkspace(), monitor = useMonitor(undefined, true, 'statistics')
@@ -28,7 +30,8 @@ export function StatisticsPage() {
   const spendingPending = monitor.subscriptions.length > 0 && !monitor.spending.data && !monitor.spending.error
   return <div className="page-stack"><PageHeading title="统计" />
     <section className="page-section" aria-labelledby="global-statistics-heading">
-      <SectionHeading id="global-statistics-heading" title="全站榜单" description={`按实际消费排序 · ${preferences.includeAdmin ? '包含 Admin' : '已排除 Admin'}`} />
+      <SectionHeading id="global-statistics-heading" title="全站榜单" description="按实际消费排序"
+        meta={<Badge variant="secondary"><ShieldCheck data-icon="inline-start" />{rankingsIncludeAdmin(preferences) ? '包含 Admin' : '已排除 Admin'}</Badge>} />
       <UserRankingCard title="消费榜" description={`${rangeLabel}${period.timeZone === preferences.timeZone ? '' : ` · ${period.timeZone}`}`} sample={rankings.data} error={rankings.error?.message} loading={rankings.isFetching} currency={preferences.actualCurrency} range={range} onRangeChange={setRange} onRefresh={() => void rankings.forceRefresh()} />
       <ModelRankingCard description={modelRangeLabel} sample={models.data} error={models.error?.message} loading={models.isFetching} currency={preferences.actualCurrency} range={modelRange} onRangeChange={setModelRange} onRefresh={() => void models.forceRefresh()} />
     </section>
