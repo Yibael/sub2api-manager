@@ -13,6 +13,20 @@ export const fixtureUpstream: Upstream = {
   async request(path, options = {}) {
     if (path === 'accounts') return { total: fixtureAccounts.length, items: fixtureAccounts }
     if (path === 'users') return { total: 1, items: [{ id: 7, role: 'admin' }] }
+    if (path === 'dashboard/models') {
+      const query = options.query!, days = (Date.parse(query.end_date) - Date.parse(query.start_date)) / 86_400_000 + 1
+      const models = query.user_id ? [
+        { model: 'gpt-5.2', actual_cost: 20.8, requests: 100, total_tokens: 1_400_000 },
+        { model: 'claude-sonnet-4-5', actual_cost: 3.18, requests: 14, total_tokens: 300_000 },
+        { model: 'gemini-2.5-pro', actual_cost: 0.62, requests: 6, total_tokens: 100_000 },
+      ] : [
+        { model: 'gpt-5.2', actual_cost: 31.4, requests: 180, total_tokens: 2_500_000 },
+        { model: 'claude-sonnet-4-5', actual_cost: 12.84, requests: 86, total_tokens: 1_200_000 },
+        { model: 'gemini-2.5-pro', actual_cost: 5.96, requests: 35, total_tokens: 600_000 },
+      ]
+      return { start_date: query.start_date, end_date: query.end_date,
+        models: models.map(row => ({ ...row, actual_cost: row.actual_cost * days, requests: row.requests * days, total_tokens: row.total_tokens * days })) }
+    }
     if (path === 'dashboard/users-ranking') {
       const days = (Date.parse(options.query!.end_date) - Date.parse(options.query!.start_date)) / 86_400_000 + 1
       return {

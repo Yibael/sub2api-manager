@@ -40,6 +40,12 @@ export type UserRankingsRequest = z.infer<typeof userRankingsRequestSchema>
 export interface UserSpendingRank { userId: number; name: string; amount: MoneyAmount; requests: number; tokens: number }
 export interface RankingPeriod { period: string; startDate: string; endDate: string; timeZone: string }
 export interface UserRanking extends RankingPeriod { range: RankingRange; rows: UserSpendingRank[]; totalAmount: MoneyAmount }
+export const modelRankingRangeSchema = z.enum(['today', '7d', '30d'])
+export type ModelRankingRange = z.infer<typeof modelRankingRangeSchema>
+export const modelRankingsRequestSchema = userRankingsRequestSchema.extend({ range: modelRankingRangeSchema })
+export type ModelRankingsRequest = z.infer<typeof modelRankingsRequestSchema>
+export interface ModelUsageRank { model: string; amount: MoneyAmount; requests: number; tokens: number }
+export interface ModelRanking extends RankingPeriod { range: ModelRankingRange; rows: ModelUsageRank[]; totalAmount: MoneyAmount }
 export function rankingInterval(intervals: Intervals) { return Math.max(30, intervals.spending) }
 export interface Sample<T> { data: T | null; updatedAt: number | null; error: string | null }
 export interface Quota { name: string; percent: number | null; used: MoneyAmount | null; limit: MoneyAmount | null; resetsAt: string | null }

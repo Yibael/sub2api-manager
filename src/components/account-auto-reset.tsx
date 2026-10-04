@@ -63,7 +63,6 @@ export function AccountAutoResetCard({ account, stale }: { account: Account; sta
       queryClient.invalidateQueries({ queryKey: key }),
       queryClient.invalidateQueries({ queryKey: resetKey }),
       queryClient.invalidateQueries({ queryKey: ['accounts', config.instanceId] }),
-      queryClient.invalidateQueries({ queryKey: ['benefits', config.instanceId, account.id] }),
     ])
   }
   async function save() {

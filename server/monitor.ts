@@ -1,9 +1,10 @@
 import { MoneyDecimal, normalizeMoney, type MoneyAmount } from '../shared/money'
-import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage, type UserRankingsRequest } from '../shared/domain'
+import { dateInZone, subscriptionCycle, type Account, type Intervals, type Sample, type SpendingRequest, type DailySpendingRequest, type SpendingRow, type TodayStats, type Usage, type UserRankingsRequest, type ModelRankingsRequest } from '../shared/domain'
 import { DemandCache } from './cache'
 import { normalizeAccount, normalizeToday, normalizeUsage, object } from './normalize'
 import { UpstreamError, type Upstream } from './upstream'
 import { Rankings } from './rankings'
+import { ModelRankings } from './model-rankings'
 import { Groups } from './groups'
 import { Benefits } from './benefits'
 import { AutoReset } from './auto-reset'
@@ -24,6 +25,7 @@ export class Monitor {
   private adminCache = new DemandCache<number[]>()
   private batchUsageSupported = true
   private userRankings: Rankings
+  private modelRanking: ModelRankings
   constructor(private upstream: Upstream, public intervals: Intervals, public serverTimeZone: string) {
     this.groupManagement = new Groups(upstream)
     this.accountBenefits = new Benefits(upstream, async id => (await this.detailSamples([id]))[id])
@@ -32,12 +34,14 @@ export class Monitor {
       this.accountsCache = new DemandCache<{ account: Account; readStartedAt: number }>()
     })
     this.userRankings = new Rankings(upstream, () => this.intervals, serverTimeZone, (signal, force) => this.admins(signal, force))
+    this.modelRanking = new ModelRankings(upstream, () => this.intervals, (signal, force) => this.admins(signal, force))
   }
 
   private admins(signal: AbortSignal, force = false) {
     return this.adminCache.get('admins', this.intervals.spending * 1000, async () => (await this.directory('users', signal)).map(v => object(v).id as number), force)
   }
   rankings(input: UserRankingsRequest) { return this.userRankings.read(input) }
+  modelRankings(input: ModelRankingsRequest) { return this.modelRanking.read(input) }
 
   private async directory(path: 'accounts' | 'users', signal: AbortSignal): Promise<unknown[]> {
     const values: unknown[] = [], seen = new Set<number>()

@@ -1,8 +1,7 @@
 import { useState } from 'react'
 import { CircleAlert, RefreshCw } from 'lucide-react'
 import { api } from '@/lib/api'
-import { useCompletionQuery } from '@/lib/completion-query'
-import { useForeground } from '@/lib/monitor'
+import { useManualQuery } from '@/lib/manual-query'
 import { useWorkspace } from '@/lib/preferences'
 import { ErrorNotice } from '@/components/common'
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card'
@@ -24,13 +23,14 @@ function BenefitNotices({ error, samples }: { error: Error | null; samples: [str
 }
 
 export function AccountBenefitsCard({ account, now }: { account: Account; now: number }) {
-  const { config, preferences } = useWorkspace(), visible = useForeground()
+  const { config, preferences } = useWorkspace()
+  const [initialBenefits] = useState(account.benefits!)
   const [showExpirations, setShowExpirations] = useState(false)
-  const quota = useCompletionQuery<QuotaBenefits>(['benefits', config.instanceId, account.id, 'quota'], config.intervals.status, visible,
+  const quota = useManualQuery<QuotaBenefits>(['benefits', config.instanceId, account.id, 'quota'],
     (force, signal) => api(`/accounts/${account.id}/benefits/quota`, force ? {} : undefined, signal))
-  const referrals = useCompletionQuery<ReferralBenefits>(['benefits', config.instanceId, account.id, 'referrals'], config.intervals.status, visible,
+  const referrals = useManualQuery<ReferralBenefits>(['benefits', config.instanceId, account.id, 'referrals'],
     (force, signal) => api(`/accounts/${account.id}/benefits/referrals`, force ? {} : undefined, signal))
-  const quotaData = quota.data ?? account.benefits!, referralData = referrals.data ?? account.benefits!
+  const quotaData = quota.data ?? initialBenefits, referralData = referrals.data ?? initialBenefits
   const expirations = quotaData.resetCredits.data?.expiresAt.filter(time => Date.parse(time) > now) ?? []
   const date = (time: string | number) => new Intl.DateTimeFormat('zh-CN', { timeZone: preferences.timeZone,
     month: '2-digit', day: '2-digit', hour: '2-digit', minute: '2-digit', hourCycle: 'h23' }).format(new Date(time))

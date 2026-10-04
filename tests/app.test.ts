@@ -36,6 +36,7 @@ describe('application boundary', () => {
     expect((await request('/accounts')).status).toBe(401)
     expect((await request('/spending/today', { ids: [1], timeZone: 'UTC', includeAdmin: false })).status).toBe(401)
     expect((await request('/spending/rankings', { range: 'today', timeZone: 'UTC', includeAdmin: false })).status).toBe(401)
+    expect((await request('/spending/models', { range: 'today', timeZone: 'UTC', includeAdmin: false })).status).toBe(401)
     expect(upstream.request).not.toHaveBeenCalled()
   })
   it('issues a secure session and never exposes the upstream credentials', async () => {
@@ -87,6 +88,24 @@ describe('application boundary', () => {
     expect(upstream.request.mock.calls.every(([path]) => ['users', 'dashboard/users-ranking'].includes(path))).toBe(true)
     const hourly = await (await request('/spending/rankings', { range: 'hour', timeZone: 'Asia/Shanghai', includeAdmin: false }, session)).json()
     expect(hourly.data.rows[0].userId).toBe(12)
+  })
+  it('protects and validates model rankings independently of accounts and user rankings', async () => {
+    const { request, upstream } = setup()
+    const login = await request('/login', { password: 'test-password-long-enough' })
+    const session = { cookie: login.headers.get('set-cookie')!.split(';')[0], pageToken: (await login.json()).pageToken }
+    const body = { range: 'today', timeZone: 'Asia/Shanghai', includeAdmin: true }
+    expect((await request('/spending/models', body, session, 'https://evil.example')).status).toBe(403)
+    expect((await request('/spending/models', { ...body, timeZone: 'invalid' }, session)).status).toBe(422)
+    expect((await request('/spending/models', { ...body, range: 'hour' }, session)).status).toBe(422)
+    expect((await request('/spending/models', { ...body, range: 'year' }, session)).status).toBe(422)
+    expect(upstream.request).not.toHaveBeenCalled()
+    const response = await request('/spending/models', body, session)
+    expect(response.status).toBe(200)
+    expect(response.headers.get('cache-control')).toBe('no-store')
+    const result = await response.json()
+    expect(result.data.rows[0]).toMatchObject({ model: 'gpt-5.2', amount: '31.4', tokens: 2_500_000, requests: 180 })
+    expect(result.data.totalAmount).toBe('50.2')
+    expect(upstream.request.mock.calls.map(([path]) => path)).toEqual(['dashboard/models'])
   })
   it('shares automatic cache intervals across distinct authenticated sessions', async () => {
     vi.useFakeTimers(); vi.setSystemTime(new Date('2026-09-29T12:00:00Z'))
