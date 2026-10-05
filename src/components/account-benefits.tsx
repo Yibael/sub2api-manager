@@ -11,7 +11,7 @@ import { Badge } from '@/components/ui/badge'
 import { Alert, AlertDescription, AlertTitle } from '@/components/ui/alert'
 import { Separator } from '@/components/ui/separator'
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@/components/ui/tooltip'
-import { Drawer, DrawerClose, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer'
+import { Drawer, DrawerContent, DrawerDescription, DrawerFooter, DrawerHeader, DrawerTitle, DrawerTrigger } from '@/components/ui/drawer'
 import { AccountAutoResetControls } from '@/components/account-auto-reset'
 import { ResetCardAction } from '@/components/reset-card-action'
 import { QueryTimeBadge } from '@/components/query-time-badge'
@@ -47,24 +47,24 @@ export function AccountBenefitsCard({ account, now, stale }: { account: Account;
   return <>
     <Drawer open={showExpirations} onOpenChange={setShowExpirations}><Card ref={resetRef} className="directory-card"><CardHeader><CardTitle>重置卡</CardTitle></CardHeader><Separator />
       <CardContent className="flex flex-col gap-4">
-        <div className="benefit-data-row reset-card-inventory"><div className="detail-metrics"><div><p>可用重置卡</p><strong className="tabular-nums">{count?.toLocaleString() ?? '—'}</strong><div className="mt-2"><QueryTimeBadge updatedAt={quotaData.resetCredits.updatedAt} /></div></div></div>
+        <div className="detail-metrics benefits-referral-metrics"><div><p>可用重置卡</p><div className="benefit-data-row reset-card-inventory"><strong className="tabular-nums">{count?.toLocaleString() ?? '—'}</strong>
           {account.autoReset ? <ResetCardAction id={account.id} count={count} now={now} near={resetNear} refreshing={quota.isFetching} refresh={quota.forceRefresh} /> : refresh}
-        </div>
+        </div><div className="mt-2"><QueryTimeBadge updatedAt={quotaData.resetCredits.updatedAt} /></div></div></div>
         {expirations.length > 0 && <div className="flex flex-wrap items-center justify-between gap-2"><TooltipProvider><Tooltip><TooltipTrigger asChild><Badge variant="muted" tabIndex={0} aria-label={expirationDescription}><CalendarClock data-icon="inline-start" />最近到期 <time dateTime={expirations[0]}>{date(expirations[0])}</time></Badge></TooltipTrigger><TooltipContent>{expirationDescription}</TooltipContent></Tooltip></TooltipProvider>{expirations.length > 1 && <DrawerTrigger asChild><Button type="button" variant="ghost" size="sm">查看全部 {expirations.length} 张</Button></DrawerTrigger>}</div>}
         <BenefitNotices error={quota.error} samples={[["重置卡", quotaData.resetCredits]]} />
         {account.autoReset && <><Separator /><AccountAutoResetControls account={account} stale={stale} near={resetNear} /></>}
       </CardContent>
-    </Card><DrawerContent className="mx-auto max-w-lg"><DrawerHeader><DrawerTitle>重置卡到期时间</DrawerTitle><DrawerDescription>按到期时间排列 · {preferences.timeZone}</DrawerDescription></DrawerHeader><div className="drawer-form"><dl className="data-list">{expirations.map((time, index) => <div key={`${time}-${index}`}><dt>第 {index + 1} 张</dt><dd><time dateTime={time}>{fullDate(time)}</time></dd></div>)}</dl></div><DrawerFooter><DrawerClose asChild><Button type="button" variant="outline">关闭</Button></DrawerClose></DrawerFooter></DrawerContent></Drawer>
+    </Card><DrawerContent className="mx-auto max-w-lg"><DrawerHeader><DrawerTitle>重置卡到期时间</DrawerTitle><DrawerDescription>按到期时间排列 · {preferences.timeZone}</DrawerDescription></DrawerHeader><div className="drawer-form"><dl className="data-list">{expirations.map((time, index) => <div key={`${time}-${index}`}><dt>第 {index + 1} 张</dt><dd><time dateTime={time}>{fullDate(time)}</time></dd></div>)}</dl></div><DrawerFooter><Button type="button" variant="outline" data-vaul-no-drag onClick={() => setShowExpirations(false)}>关闭</Button></DrawerFooter></DrawerContent></Drawer>
     <Card className="directory-card benefits-card"><CardHeader><CardTitle>账号权益</CardTitle></CardHeader><Separator /><CardContent className="benefits-content">
       <section ref={creditRef} className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-credits-${account.id}`}>
         <div className="benefit-heading"><h3 id={`benefits-credits-${account.id}`}>Credits</h3></div>
-        <div className="benefit-data-row"><div className="detail-metrics benefits-referral-metrics"><div><strong className="tabular-nums">{formatCredits(quotaData.credits.data)}</strong><div className="mt-2"><QueryTimeBadge updatedAt={quotaData.credits.updatedAt} /></div></div></div>{refresh}</div>
+        <div className="detail-metrics benefits-referral-metrics"><div><div className="benefit-data-row"><strong className="tabular-nums">{formatCredits(quotaData.credits.data)}</strong>{refresh}</div><div className="mt-2"><QueryTimeBadge updatedAt={quotaData.credits.updatedAt} /></div></div></div>
         <BenefitNotices error={quota.error} samples={[["Credits", quotaData.credits]]} />
       </section>
       <Separator orientation="vertical" className="benefits-divider" />
       <section ref={referralRef} className="flex min-w-0 flex-col gap-4" aria-labelledby={`benefits-referrals-${account.id}`}><Separator className="benefits-mobile-divider" />
         <div className="benefit-heading"><h3 id={`benefits-referrals-${account.id}`}>邀请</h3></div>
-        <div className="benefit-data-row"><div className="detail-metrics benefits-referral-metrics"><div><p>可邀请数量</p><strong className="tabular-nums">{referralData.referrals.data?.availableInvites?.toLocaleString() ?? '—'}</strong><div className="mt-2"><QueryTimeBadge updatedAt={referralData.referrals.updatedAt} /></div></div></div><RefreshButton mode="icon" busy={referrals.isFetching} label="查询最新可邀请数量" onClick={() => void referrals.forceRefresh()} /></div>
+        <div className="detail-metrics benefits-referral-metrics"><div><p>可邀请数量</p><div className="benefit-data-row"><strong className="tabular-nums">{referralData.referrals.data?.availableInvites?.toLocaleString() ?? '—'}</strong><RefreshButton mode="icon" busy={referrals.isFetching} label="查询最新可邀请数量" onClick={() => void referrals.forceRefresh()} /></div><div className="mt-2"><QueryTimeBadge updatedAt={referralData.referrals.updatedAt} /></div></div></div>
         <BenefitNotices error={referrals.error} samples={[["可邀请数量", referralData.referrals]]} />
       </section>
     </CardContent></Card>

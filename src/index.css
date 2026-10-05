@@ -278,8 +278,7 @@ button:not(:disabled), a { cursor: pointer; }
 .benefit-heading h3 { font-size: var(--app-body); font-weight: 500; }
 .benefits-card { container: benefits / inline-size; min-width: 0; }
 .benefit-data-row { display: grid; grid-template-columns: minmax(0, 1fr) auto; align-items: center; gap: 16px; }
-.benefit-data-row > .detail-metrics { grid-template-columns: minmax(0, 1fr); }
-.reset-card-inventory > .reset-card-receipt { grid-column: 1 / -1; }
+.reset-card-inventory > [data-slot=alert] { grid-column: 1 / -1; }
 .benefits-content { display: grid; grid-template-columns: minmax(0, 1fr); gap: 20px; }
 .benefits-divider { display: none; }
 @container benefits (min-width: 42rem) {
